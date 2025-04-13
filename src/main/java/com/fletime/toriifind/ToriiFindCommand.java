@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.MutableText;
@@ -92,6 +93,8 @@ public class ToriiFindCommand {
                     .then(literal("name")
                         .then(argument("keyword", StringArgumentType.greedyString())
                             .executes(context -> searchHoutuByName(context, StringArgumentType.getString(context, "keyword"))))))
+                .then(literal("ciallo")
+                    .executes(context -> sendCialloMessage(context)))
         );
     }
 
@@ -288,5 +291,13 @@ public class ToriiFindCommand {
         }
         
         return houtuList;
+    }
+
+    private static int sendCialloMessage(CommandContext<FabricClientCommandSource> context) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null) {
+            client.player.networkHandler.sendChatMessage("Ciallo～(∠・ω< )⌒☆");
+        }
+        return 1;
     }
 } 
