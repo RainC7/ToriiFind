@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"id": "toriifind",
+	"version": "${version}",
+	"name": "ToriiFind",
+	"description": "一个很方便的查询RIA服务器内鸟居信息的Mod",
+	"authors": [
+		"FleTime"
+	],
+	"license": "CC0-1.0",
+	"icon": "assets/toriifind/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.fletime.toriifind.ToriiFind"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.14.3",
+		"minecraft": ">=1.20.1",
+		"java": ">=17",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
