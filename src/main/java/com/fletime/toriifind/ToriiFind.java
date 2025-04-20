@@ -2,6 +2,7 @@ package com.fletime.toriifind;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.gson.JsonObject;
@@ -54,8 +55,8 @@ public class ToriiFind implements ClientModInitializer {
 				if (defaultConfigStream != null) {
 					Files.copy(defaultConfigStream, configFile, StandardCopyOption.REPLACE_EXISTING);
 					defaultConfigStream.close();
-				}
-			} catch (IOException e) {
+					}
+				} catch (IOException e) {
 			}
 		}
 	}
@@ -68,5 +69,14 @@ public class ToriiFind implements ClientModInitializer {
 			}
 			return 0; // 如果没有版本号，返回0，表示版本最低
 		}
+	}
+	
+	// 多语言的方法，如果崩了先干掉这个，但是没崩，好好好
+	public static Text translate(String key) {
+		return Text.translatable(key);
+	}
+	
+	public static Text translate(String key, Object... args) {
+		return Text.translatable(key, args);
 	}
 }

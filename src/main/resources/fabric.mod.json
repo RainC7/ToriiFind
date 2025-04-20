@@ -3,7 +3,7 @@
 	"id": "toriifind",
 	"version": "${version}",
 	"name": "ToriiFind",
-	"description": "一个很方便的查询RIA服务器内鸟居信息的Mod",
+	"description": "一个可以快速查询RIA服务器内鸟居信息的Mod",
 	"authors": [
 		"FleTime"
 	],

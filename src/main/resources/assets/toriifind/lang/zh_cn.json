@@ -1,0 +1,25 @@
+{
+  "modmenu.summaryTranslation.toriifind": "一个可以快速查询RIA服务器内鸟居信息的Mod",
+  "modmenu.descriptionTranslation.toriifind": "一个可以快速查询RIA服务器内鸟居信息的Mod",
+  
+  "toriifind.help.title": "§6§lToriiFind 指令列表",
+  "toriifind.help.command.help": "§7/toriifind help §8| §f显示指令信息",
+  "toriifind.help.command.zeroth_num": "§7/toriifind zeroth num <编号> §8| §f按编号查找零洲鸟居",
+  "toriifind.help.command.zeroth_name": "§7/toriifind zeroth name <关键字> §8| §f按名称关键字或拼音查找零洲鸟居",
+  "toriifind.help.command.houtu_num": "§7/toriifind houtu num <编号> §8| §f按编号查找后土境地",
+  "toriifind.help.command.houtu_name": "§7/toriifind houtu name <关键字> §8| §f按名称关键字或拼音查找后土境地",
+  "toriifind.help.command.ciallo": "§7/toriifind ciallo §8| §fCiallo～(∠・ω< )⌒☆",
+  
+  "toriifind.result.title": "§6§l查询结果 §7(共 §7%d §7个)",
+  "toriifind.result.empty.torii": "§c未找到任何相关的鸟居信息",
+  "toriifind.result.empty.houtu": "§c未找到任何相关的境地信息",
+  "toriifind.result.header.torii": "§7编号 §8| §7等级 §8| §7鸟居名称",
+  "toriifind.result.header.houtu": "§7编号 §8| §7等级 §8| §7境地名称",
+  "toriifind.result.wiki_link": "§9[WIKI]",
+  "toriifind.result.wiki_hover": "§7点击查看Wiki页面\n§f%s",
+  
+  "toriifind.result.format.entry": "§f%s §8| §f%s §8| §f%s",
+  
+  "toriifind.error.config": "§c读取配置文件时出错: %s",
+  "toriifind.divider": "§8§m----------------------------------------"
+} 

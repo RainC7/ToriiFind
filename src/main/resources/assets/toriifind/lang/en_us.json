@@ -1,0 +1,25 @@
+{
+  "modmenu.summaryTranslation.toriifind": "A mod that can quickly search for torii information in RIA server",
+  "modmenu.descriptionTranslation.toriifind": "A mod that can quickly search for torii information in RIA server.",
+  
+  "toriifind.help.title": "§6§lToriiFind Command List",
+  "toriifind.help.command.help": "§7/toriifind help §8| §fShow command information",
+  "toriifind.help.command.zeroth_num": "§7/toriifind zeroth num <number> §8| §fSearch Zeroth torii by number",
+  "toriifind.help.command.zeroth_name": "§7/toriifind zeroth name <keyword> §8| §fSearch Zeroth torii by name or pinyin",
+  "toriifind.help.command.houtu_num": "§7/toriifind houtu num <number> §8| §fSearch Houtu territory by number",
+  "toriifind.help.command.houtu_name": "§7/toriifind houtu name <keyword> §8| §fSearch Houtu territory by name or pinyin",
+  "toriifind.help.command.ciallo": "§7/toriifind ciallo §8| §fCiallo～(∠・ω< )⌒☆",
+  
+  "toriifind.result.title": "§6§lSearch Results §7(Total: §7%d§7)",
+  "toriifind.result.empty.torii": "§cNo matching torii information found",
+  "toriifind.result.empty.houtu": "§cNo matching territory information found",
+  "toriifind.result.header.torii": "§7Number §8| §7Level §8| §7Torii Name",
+  "toriifind.result.header.houtu": "§7Number §8| §7Level §8| §7Territory Name",
+  "toriifind.result.wiki_link": "§9[WIKI]",
+  "toriifind.result.wiki_hover": "§7Click to view Wiki page\n§f%s",
+  
+  "toriifind.result.format.entry": "§f%s §8| §f%s §8| §f%s",
+  
+  "toriifind.error.config": "§cError reading config file: %s",
+  "toriifind.divider": "§8§m----------------------------------------"
+} 

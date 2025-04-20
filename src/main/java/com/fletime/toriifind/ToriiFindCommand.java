@@ -19,6 +19,11 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.sourceforge.pinyin4j.PinyinHelper;
+import net.sourceforge.pinyin4j.format.HanyuPinyinCaseType;
+import net.sourceforge.pinyin4j.format.HanyuPinyinOutputFormat;
+import net.sourceforge.pinyin4j.format.HanyuPinyinToneType;
+import net.sourceforge.pinyin4j.format.exception.BadHanyuPinyinOutputFormatCombination;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -67,6 +72,60 @@ public class ToriiFindCommand {
         }
     }
 
+    // 初始化拼音
+    private static HanyuPinyinOutputFormat pinyinFormat;
+    private static HanyuPinyinOutputFormat getPinyinFormat() {
+        if (pinyinFormat == null) {
+            pinyinFormat = new HanyuPinyinOutputFormat();
+            
+            // 小写，不带声调
+            pinyinFormat.setCaseType(HanyuPinyinCaseType.LOWERCASE);
+            pinyinFormat.setToneType(HanyuPinyinToneType.WITHOUT_TONE);
+        }
+        return pinyinFormat;
+    }
+    
+    /**
+     * 将中文字符串转换为拼音字符串（不带声调），抄来的，爽
+     * @param chineseStr 中文字符串
+     * @return 对应的拼音字符串，非中文字符保持不变
+     */
+    private static String toPinyin(String chineseStr) {
+        if (chineseStr == null || chineseStr.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder pinyinBuilder = new StringBuilder();
+        char[] chars = chineseStr.toCharArray();
+        
+        try {
+            for (char c : chars) {
+                
+                // 判断是否是汉字
+                if (Character.toString(c).matches("[\\u4E00-\\u9FA5]+")) {
+                    
+                    // 将汉字转为拼音数组（多音字会返回多个拼音）
+                    String[] pinyinArray = PinyinHelper.toHanyuPinyinStringArray(c, getPinyinFormat());
+                    if (pinyinArray != null && pinyinArray.length > 0) {
+                        
+                        // 只取第一个拼音（对于多音字）
+                        pinyinBuilder.append(pinyinArray[0]);
+                    }
+                } else {
+                    
+                    // 非汉字直接添加
+                    pinyinBuilder.append(c);
+                }
+            }
+        } catch (BadHanyuPinyinOutputFormatCombination e) {
+            
+            // 转换失败时直回原字符串
+            return chineseStr;
+        }
+        
+        return pinyinBuilder.toString();
+    }
+
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             registerCommands(dispatcher);
@@ -85,29 +144,30 @@ public class ToriiFindCommand {
                             .executes(context -> searchZerothByNumber(context, IntegerArgumentType.getInteger(context, "number")))))
                     .then(literal("name")
                         .then(argument("keyword", StringArgumentType.greedyString())
-                            .executes(context -> searchZerothByName(context, StringArgumentType.getString(context, "keyword"))))))
+                            .executes(context -> searchZerothByNameOrPinyin(context, StringArgumentType.getString(context, "keyword"))))))
                 .then(literal("houtu")
                     .then(literal("num")
                         .then(argument("number", StringArgumentType.string())
                             .executes(context -> searchHoutuByNumber(context, StringArgumentType.getString(context, "number")))))
                     .then(literal("name")
                         .then(argument("keyword", StringArgumentType.greedyString())
-                            .executes(context -> searchHoutuByName(context, StringArgumentType.getString(context, "keyword"))))))
+                            .executes(context -> searchHoutuByNameOrPinyin(context, StringArgumentType.getString(context, "keyword"))))))
                 .then(literal("ciallo")
                     .executes(context -> sendCialloMessage(context)))
         );
     }
 
     private static int showHelp(CommandContext<FabricClientCommandSource> context) {
-        context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-        context.getSource().sendFeedback(Text.literal("§6§lToriiFind 指令帮助"));
-        context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-        context.getSource().sendFeedback(Text.literal("§7/toriifind help §8| §f显示此帮助信息"));
-        context.getSource().sendFeedback(Text.literal("§7/toriifind zeroth num <编号> §8| §f按编号查找零洲鸟居"));
-        context.getSource().sendFeedback(Text.literal("§7/toriifind zeroth name <关键字> §8| §f按名称关键字查找零洲鸟居"));
-        context.getSource().sendFeedback(Text.literal("§7/toriifind houtu num <编号> §8| §f按编号查找后土境地"));
-        context.getSource().sendFeedback(Text.literal("§7/toriifind houtu name <关键字> §8| §f按名称关键字查找后土境地"));
-        context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.title"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.help"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.zeroth_num"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.zeroth_name"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.houtu_num"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.houtu_name"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.ciallo"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         return 1;
     }
 
@@ -126,7 +186,7 @@ public class ToriiFindCommand {
             displayZerothResults(context, results);
             
         } catch (Exception e) {
-            context.getSource().sendError(Text.literal("§c读取配置文件时出错: " + e.getMessage()));
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
         }
         
         return 1;
@@ -147,7 +207,75 @@ public class ToriiFindCommand {
             displayZerothResults(context, results);
             
         } catch (Exception e) {
-            context.getSource().sendError(Text.literal("§c读取配置文件时出错: " + e.getMessage()));
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
+        }
+        
+        return 1;
+    }
+
+    private static int searchZerothByPinyin(CommandContext<FabricClientCommandSource> context, String keyword) {
+        List<Torii> results = new ArrayList<>();
+        String lowercaseKeyword = keyword.toLowerCase(); // 转为小写以便不区分大小写比较
+        
+        try {
+            List<Torii> toriiList = loadZerothData();
+            
+            // 名称中包含关键字
+            for (Torii torii : toriiList) {
+                if (torii.名称.toLowerCase().contains(lowercaseKeyword)) {
+                    results.add(torii);
+                }
+            }
+            
+            // 拼音中包含关键字
+            if (results.isEmpty()) {
+                for (Torii torii : toriiList) {
+                    String namePinyin = toPinyin(torii.名称).toLowerCase();
+                    if (namePinyin.contains(lowercaseKeyword)) {
+                        results.add(torii);
+                    }
+                }
+            }
+            
+            displayZerothResults(context, results);
+            
+        } catch (Exception e) {
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
+        }
+        
+        return 1;
+    }
+
+    private static int searchZerothByNameOrPinyin(CommandContext<FabricClientCommandSource> context, String keyword) {
+        List<Torii> results = new ArrayList<>();
+        
+        try {
+            List<Torii> toriiList = loadZerothData();
+            
+            // 首先，按名称进行精确匹配
+            for (Torii torii : toriiList) {
+                if (torii.名称.contains(keyword)) {
+                    results.add(torii);
+                }
+            }
+            
+            // 如果没有找到，且关键字由字母组成，则尝试按拼音进行搜索
+            // 英文的输入不完全的，在这里也能匹配到
+            if (results.isEmpty() && keyword.matches("^[a-zA-Z]+$")) {
+                String lowercaseKeyword = keyword.toLowerCase();
+                
+                for (Torii torii : toriiList) {
+                    String namePinyin = toPinyin(torii.名称).toLowerCase();
+                    if (namePinyin.contains(lowercaseKeyword)) {
+                        results.add(torii);
+                    }
+                }
+            }
+            
+            displayZerothResults(context, results);
+            
+        } catch (Exception e) {
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
         }
         
         return 1;
@@ -168,7 +296,7 @@ public class ToriiFindCommand {
             displayHoutuResults(context, results);
             
         } catch (Exception e) {
-            context.getSource().sendError(Text.literal("§c读取配置文件时出错: " + e.getMessage()));
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
         }
         
         return 1;
@@ -189,85 +317,161 @@ public class ToriiFindCommand {
             displayHoutuResults(context, results);
             
         } catch (Exception e) {
-            context.getSource().sendError(Text.literal("§c读取配置文件时出错: " + e.getMessage()));
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
         }
         
         return 1;
     }
     
+    private static int searchHoutuByPinyin(CommandContext<FabricClientCommandSource> context, String keyword) {
+        List<Houtu> results = new ArrayList<>();
+        String lowercaseKeyword = keyword.toLowerCase();
+        
+        try {
+            List<Houtu> houtuList = loadHoutuData();
+
+            for (Houtu houtu : houtuList) {
+                if (houtu.名称.toLowerCase().contains(lowercaseKeyword)) {
+                    results.add(houtu);
+                }
+            }
+
+            if (results.isEmpty()) {
+                for (Houtu houtu : houtuList) {
+                    String namePinyin = toPinyin(houtu.名称).toLowerCase();
+                    if (namePinyin.contains(lowercaseKeyword)) {
+                        results.add(houtu);
+                    }
+                }
+            }
+            
+            displayHoutuResults(context, results);
+            
+        } catch (Exception e) {
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
+        }
+        
+        return 1;
+    }
+
+    private static int searchHoutuByNameOrPinyin(CommandContext<FabricClientCommandSource> context, String keyword) {
+        List<Houtu> results = new ArrayList<>();
+        
+        try {
+            List<Houtu> houtuList = loadHoutuData();
+            
+            for (Houtu houtu : houtuList) {
+                if (houtu.名称.contains(keyword)) {
+                    results.add(houtu);
+                }
+            }
+            
+            if (results.isEmpty() && keyword.matches("^[a-zA-Z]+$")) {
+                String lowercaseKeyword = keyword.toLowerCase();
+
+                for (Houtu houtu : houtuList) {
+                    String namePinyin = toPinyin(houtu.名称).toLowerCase();
+                    if (namePinyin.contains(lowercaseKeyword)) {
+                        results.add(houtu);
+                    }
+                }
+            }
+            
+            displayHoutuResults(context, results);
+            
+        } catch (Exception e) {
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
+        }
+        
+        return 1;
+    }
+
     private static void displayZerothResults(CommandContext<FabricClientCommandSource> context, List<Torii> results) {
         if (results.isEmpty()) {
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-            context.getSource().sendFeedback(Text.literal("§c未找到任何匹配的鸟居信息"));
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.empty.torii"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         } else {
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-            context.getSource().sendFeedback(Text.literal("§6§l查询结果 §7(共 " + results.size() + " 个)"));
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-            context.getSource().sendFeedback(Text.literal("§7编号 §8| §7等级 §8| §7鸟居名称"));
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.title", results.size()));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.header.torii"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
             
             for (Torii torii : results) {
-                MutableText baseText = Text.literal("§f" + torii.编号 + " §8| §f" + 
-                                                   torii.等级 + " §8| §f" + 
-                                                   torii.名称 + " ");
+                String formattedText = String.format(
+                    ToriiFind.translate("toriifind.result.format.entry").getString(),
+                    torii.编号, torii.等级, torii.名称
+                );
+                MutableText baseText = Text.literal(formattedText + " ");
                 
                 String wikiUrl = "https://wiki.ria.red/wiki/" + torii.名称;
                 
-                MutableText linkText = Text.literal("§9[WIKI]")
-                    .setStyle(Style.EMPTY
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("§7点击查看Wiki页面\n§f" + wikiUrl)))
-                        .withFormatting(Formatting.UNDERLINE));
+                Style linkStyle = Style.EMPTY
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
+                                                  ToriiFind.translate("toriifind.result.wiki_hover", wikiUrl)))
+                    .withFormatting(Formatting.UNDERLINE);
+                
+                MutableText linkText = ((MutableText)ToriiFind.translate("toriifind.result.wiki_link")).setStyle(linkStyle);
                 
                 context.getSource().sendFeedback(baseText.append(linkText));
             }
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         }
     }
 
     private static void displayHoutuResults(CommandContext<FabricClientCommandSource> context, List<Houtu> results) {
         if (results.isEmpty()) {
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-            context.getSource().sendFeedback(Text.literal("§c未找到任何匹配的境地信息"));
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.empty.houtu"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         } else {
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-            context.getSource().sendFeedback(Text.literal("§6§l查询结果 §7(共 " + results.size() + " 个)"));
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
-            context.getSource().sendFeedback(Text.literal("§7编号 §8| §7等级 §8| §7境地名称"));
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.title", results.size()));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.header.houtu"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
             
             for (Houtu houtu : results) {
-                MutableText baseText = Text.literal("§f" + houtu.编号 + " §8| §f" + 
-                                                   houtu.等级 + " §8| §f" + 
-                                                   houtu.名称 + " ");
+                String formattedText = String.format(
+                    ToriiFind.translate("toriifind.result.format.entry").getString(),
+                    houtu.编号, houtu.等级, houtu.名称
+                );
+                MutableText baseText = Text.literal(formattedText + " ");
                 
                 String wikiUrl = "https://wiki.ria.red/wiki/" + houtu.名称;
                 
-                MutableText linkText = Text.literal("§9[WIKI]")
-                    .setStyle(Style.EMPTY
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("§7点击查看Wiki页面\n§f" + wikiUrl)))
-                        .withFormatting(Formatting.UNDERLINE));
+                Style linkStyle = Style.EMPTY
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
+                                                  ToriiFind.translate("toriifind.result.wiki_hover", wikiUrl)))
+                    .withFormatting(Formatting.UNDERLINE);
+                
+                MutableText linkText = ((MutableText)ToriiFind.translate("toriifind.result.wiki_link")).setStyle(linkStyle);
                 
                 context.getSource().sendFeedback(baseText.append(linkText));
             }
-            context.getSource().sendFeedback(Text.literal("§8§m----------------------------------------"));
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         }
     }
     
     private static List<Torii> loadZerothData() throws IOException {
-        Path configFile = FabricLoader.getInstance().getConfigDir().resolve("toriifind.json");
+        Path configDir = FabricLoader.getInstance().getConfigDir();
+        Path configFile = configDir.resolve("toriifind.json");
         List<Torii> toriiList = new ArrayList<>();
         
         try (Reader reader = Files.newBufferedReader(configFile)) {
             JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
             JsonArray zerothArray = jsonObject.getAsJsonArray("zeroth");
             
-            Gson gson = new Gson();
             for (int i = 0; i < zerothArray.size(); i++) {
-                Torii torii = gson.fromJson(zerothArray.get(i), Torii.class);
+                JsonObject toriiObject = zerothArray.get(i).getAsJsonObject();
+                String 编号 = toriiObject.get("编号").getAsString();
+                String 名称 = toriiObject.get("名称").getAsString();
+                String 等级 = toriiObject.get("等级").getAsString();
+                
+                Torii torii = new Torii(编号, 名称, 等级);
                 toriiList.add(torii);
             }
         }
@@ -276,23 +480,29 @@ public class ToriiFindCommand {
     }
 
     private static List<Houtu> loadHoutuData() throws IOException {
-        Path configFile = FabricLoader.getInstance().getConfigDir().resolve("toriifind.json");
+        Path configDir = FabricLoader.getInstance().getConfigDir();
+        Path configFile = configDir.resolve("toriifind.json");
         List<Houtu> houtuList = new ArrayList<>();
         
         try (Reader reader = Files.newBufferedReader(configFile)) {
             JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
             JsonArray houtuArray = jsonObject.getAsJsonArray("houtu");
             
-            Gson gson = new Gson();
             for (int i = 0; i < houtuArray.size(); i++) {
-                Houtu houtu = gson.fromJson(houtuArray.get(i), Houtu.class);
+                JsonObject houtuObject = houtuArray.get(i).getAsJsonObject();
+                String 编号 = houtuObject.get("编号").getAsString();
+                String 名称 = houtuObject.get("名称").getAsString();
+                String 等级 = houtuObject.get("等级").getAsString();
+                
+                Houtu houtu = new Houtu(编号, 名称, 等级);
                 houtuList.add(houtu);
             }
         }
         
         return houtuList;
     }
-
+    
+    // 往公屏发一条消息 𝑪𝒊𝒂𝒍𝒍𝒐～(∠・ω< )⌒★
     private static int sendCialloMessage(CommandContext<FabricClientCommandSource> context) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null) {

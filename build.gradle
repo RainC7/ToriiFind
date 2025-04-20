@@ -31,7 +31,7 @@ dependencies {
 	// Gson用于解析JSON
 	implementation 'com.google.code.gson:gson:2.10.1'
 	
-	// 拼音转换库 - 使用include方法嵌入到最终jar
+	// 拼音转换库
 	include(implementation('com.belerweb:pinyin4j:2.5.1'))
 }
 
