@@ -7,6 +7,9 @@
 	"authors": [
 		"FleTime"
 	],
+	"contact": {
+		"sources": "https://github.com/7N4D6Un/ToriiFind"
+	},
 	"license": "CC0-1.0",
 	"icon": "assets/toriifind/icon.png",
 	"environment": "client",
