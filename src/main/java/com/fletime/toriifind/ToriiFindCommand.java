@@ -38,37 +38,37 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 public class ToriiFindCommand {
     // 零洲数据类
     private static class Torii {
-        private final String 编号;
-        private final String 名称;
-        private final String 等级;
+        private final String id;
+        private final String name;
+        private final String level;
 
-        public Torii(String 编号, String 名称, String 等级) {
-            this.编号 = 编号;
-            this.名称 = 名称;
-            this.等级 = 等级;
+        public Torii(String id, String name, String level) {
+            this.id = id;
+            this.name = name;
+            this.level = level;
         }
 
         @Override
         public String toString() {
-            return 编号 + " " + 等级 + " " + 名称;
+            return id + " " + level + " " + name;
         }
     }
 
     // 后土数据类
     private static class Houtu {
-        private final String 编号;
-        private final String 名称;
-        private final String 等级;
+        private final String id;
+        private final String name;
+        private final String level;
 
-        public Houtu(String 编号, String 名称, String 等级) {
-            this.编号 = 编号;
-            this.名称 = 名称;
-            this.等级 = 等级;
+        public Houtu(String id, String name, String level) {
+            this.id = id;
+            this.name = name;
+            this.level = level;
         }
 
         @Override
         public String toString() {
-            return 编号 + " " + 等级 + " " + 名称;
+            return id + " " + level + " " + name;
         }
     }
 
@@ -178,7 +178,7 @@ public class ToriiFindCommand {
             List<Torii> toriiList = loadZerothData();
             
             for (Torii torii : toriiList) {
-                if (torii.编号.equals(String.valueOf(number))) {
+                if (torii.id.equals(String.valueOf(number))) {
                     results.add(torii);
                 }
             }
@@ -199,7 +199,7 @@ public class ToriiFindCommand {
             List<Torii> toriiList = loadZerothData();
             
             for (Torii torii : toriiList) {
-                if (torii.名称.contains(keyword)) {
+                if (torii.name.contains(keyword)) {
                     results.add(torii);
                 }
             }
@@ -222,7 +222,7 @@ public class ToriiFindCommand {
             
             // 名称中包含关键字
             for (Torii torii : toriiList) {
-                if (torii.名称.toLowerCase().contains(lowercaseKeyword)) {
+                if (torii.name.toLowerCase().contains(lowercaseKeyword)) {
                     results.add(torii);
                 }
             }
@@ -230,7 +230,7 @@ public class ToriiFindCommand {
             // 拼音中包含关键字
             if (results.isEmpty()) {
                 for (Torii torii : toriiList) {
-                    String namePinyin = toPinyin(torii.名称).toLowerCase();
+                    String namePinyin = toPinyin(torii.name).toLowerCase();
                     if (namePinyin.contains(lowercaseKeyword)) {
                         results.add(torii);
                     }
@@ -254,7 +254,7 @@ public class ToriiFindCommand {
             
             // 首先，按名称进行精确匹配
             for (Torii torii : toriiList) {
-                if (torii.名称.contains(keyword)) {
+                if (torii.name.contains(keyword)) {
                     results.add(torii);
                 }
             }
@@ -265,7 +265,7 @@ public class ToriiFindCommand {
                 String lowercaseKeyword = keyword.toLowerCase();
                 
                 for (Torii torii : toriiList) {
-                    String namePinyin = toPinyin(torii.名称).toLowerCase();
+                    String namePinyin = toPinyin(torii.name).toLowerCase();
                     if (namePinyin.contains(lowercaseKeyword)) {
                         results.add(torii);
                     }
@@ -288,7 +288,7 @@ public class ToriiFindCommand {
             List<Houtu> houtuList = loadHoutuData();
             
             for (Houtu houtu : houtuList) {
-                if (houtu.编号.contains(number)) {
+                if (houtu.id.contains(number)) {
                     results.add(houtu);
                 }
             }
@@ -309,7 +309,7 @@ public class ToriiFindCommand {
             List<Houtu> houtuList = loadHoutuData();
             
             for (Houtu houtu : houtuList) {
-                if (houtu.名称.contains(keyword)) {
+                if (houtu.name.contains(keyword)) {
                     results.add(houtu);
                 }
             }
@@ -331,14 +331,14 @@ public class ToriiFindCommand {
             List<Houtu> houtuList = loadHoutuData();
 
             for (Houtu houtu : houtuList) {
-                if (houtu.名称.toLowerCase().contains(lowercaseKeyword)) {
+                if (houtu.name.toLowerCase().contains(lowercaseKeyword)) {
                     results.add(houtu);
                 }
             }
 
             if (results.isEmpty()) {
                 for (Houtu houtu : houtuList) {
-                    String namePinyin = toPinyin(houtu.名称).toLowerCase();
+                    String namePinyin = toPinyin(houtu.name).toLowerCase();
                     if (namePinyin.contains(lowercaseKeyword)) {
                         results.add(houtu);
                     }
@@ -361,7 +361,7 @@ public class ToriiFindCommand {
             List<Houtu> houtuList = loadHoutuData();
             
             for (Houtu houtu : houtuList) {
-                if (houtu.名称.contains(keyword)) {
+                if (houtu.name.contains(keyword)) {
                     results.add(houtu);
                 }
             }
@@ -370,7 +370,7 @@ public class ToriiFindCommand {
                 String lowercaseKeyword = keyword.toLowerCase();
 
                 for (Houtu houtu : houtuList) {
-                    String namePinyin = toPinyin(houtu.名称).toLowerCase();
+                    String namePinyin = toPinyin(houtu.name).toLowerCase();
                     if (namePinyin.contains(lowercaseKeyword)) {
                         results.add(houtu);
                     }
@@ -401,11 +401,11 @@ public class ToriiFindCommand {
             for (Torii torii : results) {
                 String formattedText = String.format(
                     ToriiFind.translate("toriifind.result.format.entry").getString(),
-                    torii.编号, torii.等级, torii.名称
+                    torii.id, torii.level, torii.name
                 );
                 MutableText baseText = Text.literal(formattedText + " ");
                 
-                String wikiUrl = "https://wiki.ria.red/wiki/" + torii.名称;
+                String wikiUrl = "https://wiki.ria.red/wiki/" + torii.name;
                 
                 Style linkStyle = Style.EMPTY
                     .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
@@ -436,11 +436,11 @@ public class ToriiFindCommand {
             for (Houtu houtu : results) {
                 String formattedText = String.format(
                     ToriiFind.translate("toriifind.result.format.entry").getString(),
-                    houtu.编号, houtu.等级, houtu.名称
+                    houtu.id, houtu.level, houtu.name
                 );
                 MutableText baseText = Text.literal(formattedText + " ");
                 
-                String wikiUrl = "https://wiki.ria.red/wiki/" + houtu.名称;
+                String wikiUrl = "https://wiki.ria.red/wiki/" + houtu.name;
                 
                 Style linkStyle = Style.EMPTY
                     .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
@@ -467,11 +467,11 @@ public class ToriiFindCommand {
             
             for (int i = 0; i < zerothArray.size(); i++) {
                 JsonObject toriiObject = zerothArray.get(i).getAsJsonObject();
-                String 编号 = toriiObject.get("编号").getAsString();
-                String 名称 = toriiObject.get("名称").getAsString();
-                String 等级 = toriiObject.get("等级").getAsString();
+                String id = toriiObject.get("编号").getAsString();
+                String name = toriiObject.get("名称").getAsString();
+                String level = toriiObject.get("等级").getAsString();
                 
-                Torii torii = new Torii(编号, 名称, 等级);
+                Torii torii = new Torii(id, name, level);
                 toriiList.add(torii);
             }
         }
@@ -490,11 +490,11 @@ public class ToriiFindCommand {
             
             for (int i = 0; i < houtuArray.size(); i++) {
                 JsonObject houtuObject = houtuArray.get(i).getAsJsonObject();
-                String 编号 = houtuObject.get("编号").getAsString();
-                String 名称 = houtuObject.get("名称").getAsString();
-                String 等级 = houtuObject.get("等级").getAsString();
+                String id = houtuObject.get("编号").getAsString();
+                String name = houtuObject.get("名称").getAsString();
+                String level = houtuObject.get("等级").getAsString();
                 
-                Houtu houtu = new Houtu(编号, 名称, 等级);
+                Houtu houtu = new Houtu(id, name, level);
                 houtuList.add(houtu);
             }
         }
