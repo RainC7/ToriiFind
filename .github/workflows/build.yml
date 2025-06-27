@@ -35,18 +35,3 @@ jobs:
         with:
           name: Artifacts
           path: build/libs/
-      # 读取 mod 版本号，供后续步骤使用
-      - name: Get mod version
-        id: get_version
-        run: |
-          echo "MOD_VERSION=$(grep '^mod_version=' gradle.properties | cut -d'=' -f2)" >> $GITHUB_ENV
-      # 创建 GitHub Release，并上传主 jar 文件，release 标题为版本号
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.MOD_VERSION }}
-          name: ${{ env.MOD_VERSION }}
-          files: build/libs/toriifind-${{ env.MOD_VERSION }}.jar
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
