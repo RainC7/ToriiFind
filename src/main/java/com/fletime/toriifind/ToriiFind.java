@@ -17,7 +17,7 @@ import java.nio.file.StandardCopyOption;
 
 public class ToriiFind implements ClientModInitializer {
 	public static final String MOD_ID = "toriifind";
-	public static final int CONFIG_VERSION = 4; // 当前配置文件版本
+	public static final int CONFIG_VERSION = 5; // 当前配置文件版本
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	@Override
