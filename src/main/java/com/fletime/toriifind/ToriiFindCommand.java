@@ -29,6 +29,7 @@ import com.fletime.toriifind.service.LynnApiService;
 import com.fletime.toriifind.service.LynnJsonService;
 import com.fletime.toriifind.service.SourceStatusService;
 import com.fletime.toriifind.service.AsyncSourceStatusService;
+import com.fletime.toriifind.service.MirrorStatusService;
 
 import java.io.IOException;
 import java.io.Reader;

@@ -33,10 +33,52 @@ public class ToriiFind implements ClientModInitializer {
 		createOrUpdateConfigFile();
 		ToriiFindCommand.register();
 		
-		// 异步初始化数据源到本地
+		// 异步初始化和更新数据源
+		initializeAndUpdateDataSources();
+	}
+	
+	/**
+	 * 初始化和更新数据源
+	 */
+	private void initializeAndUpdateDataSources() {
 		com.fletime.toriifind.service.LocalDataService.initializeAllDataSources(sourceConfig.getSources())
+			.thenCompose(v -> {
+				// 初始化完成后，检查所有数据源的更新
+				LOGGER.info("[ToriiFind] 正在检查数据源更新...");
+				
+				java.util.List<java.util.concurrent.CompletableFuture<Boolean>> updateTasks = 
+					new java.util.ArrayList<>();
+				
+				for (java.util.Map.Entry<String, com.fletime.toriifind.config.SourceConfig.DataSource> entry : 
+					 sourceConfig.getSources().entrySet()) {
+					String sourceName = entry.getKey();
+					com.fletime.toriifind.config.SourceConfig.DataSource dataSource = entry.getValue();
+					
+					// 只检查JSON类型的数据源更新
+					if (!dataSource.isApiMode()) {
+						java.util.concurrent.CompletableFuture<Boolean> updateTask = 
+							com.fletime.toriifind.service.LocalDataService.checkAndUpdateDataSource(sourceName, dataSource)
+								.handle((updated, throwable) -> {
+									if (throwable != null) {
+										LOGGER.warn("[ToriiFind] 检查 {} 更新失败: {}", sourceName, throwable.getMessage());
+										return false;
+									}
+									if (updated) {
+										LOGGER.info("[ToriiFind] {} 已更新到最新版本", sourceName);
+									}
+									return updated;
+								});
+						updateTasks.add(updateTask);
+					}
+				}
+				
+				// 等待所有更新任务完成
+				return java.util.concurrent.CompletableFuture.allOf(
+					updateTasks.toArray(new java.util.concurrent.CompletableFuture[0])
+				);
+			})
 			.thenRun(() -> {
-				LOGGER.info("[ToriiFind] 数据源初始化完成");
+				LOGGER.info("[ToriiFind] 数据源初始化和更新检查完成");
 			})
 			.exceptionally(throwable -> {
 				LOGGER.error("[ToriiFind] 数据源初始化失败: " + throwable.getMessage());
