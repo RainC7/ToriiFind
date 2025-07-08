@@ -23,7 +23,7 @@ public class ToriiFind implements ClientModInitializer {
 	public static final int CONFIG_VERSION = 5; // 当前配置文件版本
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-	// 云端配置文件
+	// 云端配置文件下载地址
 	private static final String SERVER_CONFIG_URL = "https://wiki.ria.red/wiki/%E7%94%A8%E6%88%B7:FleTime/toriifind.json?action=raw";
 
 	@Override
@@ -32,12 +32,17 @@ public class ToriiFind implements ClientModInitializer {
 		ToriiFindCommand.register();
 	}
 	
+	/**
+	 * 检查本地配置文件是否存在或版本过低，必要时释放默认配置。
+	 * 然后与云端配置文件比对版本，自动下载新版本覆盖本地。
+	 */
 	private void createOrUpdateConfigFile() {
 		Path configDir = FabricLoader.getInstance().getConfigDir();
 		Path configFile = configDir.resolve("toriifind.json");
 		
 		boolean shouldUpdateConfig = false;
 		
+		// 检查本地配置文件是否存在或版本过低
 		if (!Files.exists(configFile)) {
 			shouldUpdateConfig = true;
 		} else {
@@ -51,6 +56,7 @@ public class ToriiFind implements ClientModInitializer {
 			}
 		}
 		
+		// 释放默认配置文件
 		if (shouldUpdateConfig) {
 			try {
 				Files.createDirectories(configDir);
@@ -61,25 +67,32 @@ public class ToriiFind implements ClientModInitializer {
 				if (defaultConfigStream != null) {
 					Files.copy(defaultConfigStream, configFile, StandardCopyOption.REPLACE_EXISTING);
 					defaultConfigStream.close();
-					}
-				} catch (IOException e) {
+				}
+			} catch (IOException e) {
+				// 忽略异常，后续有日志输出
 			}
 		}
 
 		// 检查云端配置文件版本
 		try {
-			int localVersion = getConfigFileVersion(configFile);
-			int serverVersion = fetchServerConfigVersion();
+			int localVersion = getConfigFileVersion(configFile); // 本地配置文件版本
+			int serverVersion = fetchServerConfigVersion();      // 云端配置文件版本
 			if (serverVersion > localVersion) {
-				LOGGER.info("检测到云端配置文件有新版本，正在下载...");
+				LOGGER.info("[ToriiFind] 检测到云端配置文件有新版本，正在下载...");
 				downloadServerConfig(configFile);
-				LOGGER.info("云端配置文件已更新到最新版本。");
+				LOGGER.info("[ToriiFind] 云端配置文件已更新到最新版本。");
 			}
 		} catch (Exception e) {
-			LOGGER.warn("检查或下载云端配置文件失败：" + e.getMessage());
+			LOGGER.warn("[ToriiFind] 检查或下载云端配置文件失败：" + e.getMessage());
 		}
 	}
 	
+	/**
+	 * 获取本地配置文件的 version 字段
+	 * @param configFile 配置文件路径
+	 * @return 版本号（无 version 字段时返回 0）
+	 * @throws IOException 读取异常
+	 */
 	private int getConfigFileVersion(Path configFile) throws IOException {
 		try (Reader reader = Files.newBufferedReader(configFile)) {
 			JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
@@ -90,7 +103,11 @@ public class ToriiFind implements ClientModInitializer {
 		}
 	}
 
-	// 获取云端配置文件 version 字段
+	/**
+	 * 获取云端配置文件的 version 字段
+	 * @return 云端配置文件版本号（无 version 字段时返回 0）
+	 * @throws IOException 网络或解析异常
+	 */
 	private int fetchServerConfigVersion() throws IOException {
 		HttpURLConnection conn = (HttpURLConnection) new URL(SERVER_CONFIG_URL).openConnection();
 		conn.setRequestMethod("GET");
@@ -106,7 +123,11 @@ public class ToriiFind implements ClientModInitializer {
 		}
 	}
 
-	// 下载云端配置文件并覆盖本地
+	/**
+	 * 下载云端配置文件并覆盖本地配置文件
+	 * @param configFile 本地配置文件路径
+	 * @throws IOException 网络或写入异常
+	 */
 	private void downloadServerConfig(Path configFile) throws IOException {
 		HttpURLConnection conn = (HttpURLConnection) new URL(SERVER_CONFIG_URL).openConnection();
 		conn.setRequestMethod("GET");
@@ -117,11 +138,21 @@ public class ToriiFind implements ClientModInitializer {
 		}
 	}
 	
-	// 多语言的方法，如果崩了先干掉这个，但是没崩，好好好
+	/**
+	 * 多语言文本转换（单参数）
+	 * @param key 语言键
+	 * @return 可翻译文本
+	 */
 	public static Text translate(String key) {
 		return Text.translatable(key);
 	}
 	
+	/**
+	 * 多语言文本转换（多参数）
+	 * @param key 语言键
+	 * @param args 参数
+	 * @return 可翻译文本
+	 */
 	public static Text translate(String key, Object... args) {
 		return Text.translatable(key, args);
 	}
