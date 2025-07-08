@@ -298,9 +298,7 @@ public class ToriiFindCommand {
      * 检查所有数据源更新和状态
      */
     private static int checkAllSources(CommandContext<FabricClientCommandSource> context) {
-        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         context.getSource().sendFeedback(Text.literal("§6正在检查所有数据源..."));
-        context.getSource().sendFeedback(Text.literal(""));
         
         Map<String, SourceConfig.DataSource> sources = ToriiFind.getAllSources();
         
@@ -344,9 +342,28 @@ public class ToriiFindCommand {
                             
                             context.getSource().sendFeedback(Text.literal(info.toString()));
                             
-                            // 显示镜像信息
+                            // 如果有镜像，直接显示镜像状态
                             if (dataSource.getMirrorUrls() != null && dataSource.getMirrorUrls().length > 0) {
-                                context.getSource().sendFeedback(Text.literal("  §7镜像: " + dataSource.getMirrorUrls().length + " 个备用地址"));
+                                MirrorStatusService.checkAllMirrors(dataSource).thenAccept(mirrorStatuses -> {
+                                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                                        for (MirrorStatusService.MirrorStatus mirror : mirrorStatuses) {
+                                            String prefix = mirror.isPrimary() ? "§b[主]" : "§7[镜像]";
+                                            String statusIcon = mirror.isAvailable() ? "§a✓" : "§c✗";
+                                            
+                                            StringBuilder line = new StringBuilder();
+                                            line.append("  ").append(prefix).append(" ");
+                                            line.append(statusIcon).append(" ");
+                                            line.append("§f").append(mirror.getUrlDisplayName()).append(" ");
+                                            line.append(mirror.getStatusText());
+                                            
+                                            if (mirror.getVersion() != null) {
+                                                line.append(" §7").append(mirror.getVersion());
+                                            }
+                                            
+                                            context.getSource().sendFeedback(Text.literal(line.toString()));
+                                        }
+                                    });
+                                });
                             }
                         });
                     }).exceptionally(throwable -> {
