@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.fletime.toriifind.config.SourceConfig;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,19 +18,49 @@ import java.nio.file.StandardCopyOption;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 public class ToriiFind implements ClientModInitializer {
 	public static final String MOD_ID = "toriifind";
-	public static final int CONFIG_VERSION = 5; // 当前配置文件版本
+	public static final int CONFIG_VERSION = 5;
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
-	// 云端配置文件下载地址
-	private static final String SERVER_CONFIG_URL = "https://wiki.ria.red/wiki/%E7%94%A8%E6%88%B7:FleTime/toriifind.json?action=raw";
+	
+	private static SourceConfig sourceConfig;
 
 	@Override
 	public void onInitializeClient() {
+		sourceConfig = SourceConfig.loadOrCreateDefault();
 		createOrUpdateConfigFile();
 		ToriiFindCommand.register();
+	}
+	
+	public static SourceConfig getSourceConfig() {
+		return sourceConfig;
+	}
+	
+	public static String getCurrentSourceUrl() {
+		SourceConfig.DataSource current = sourceConfig.getCurrentDataSource();
+		return current != null ? current.getUrl() : null;
+	}
+	
+	public static boolean switchSource(String sourceName) {
+		if (sourceConfig.getSources().containsKey(sourceName)) {
+			SourceConfig.DataSource source = sourceConfig.getSources().get(sourceName);
+			if (source.isEnabled()) {
+				sourceConfig.setCurrentSource(sourceName);
+				sourceConfig.save();
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public static String getCurrentSourceName() {
+		return sourceConfig.getCurrentSource();
+	}
+	
+	public static Map<String, SourceConfig.DataSource> getAllSources() {
+		return sourceConfig.getSources();
 	}
 	
 	/**
@@ -74,16 +105,19 @@ public class ToriiFind implements ClientModInitializer {
 		}
 
 		// 检查云端配置文件版本
-		try {
-			int localVersion = getConfigFileVersion(configFile); // 本地配置文件版本
-			int serverVersion = fetchServerConfigVersion();      // 云端配置文件版本
-			if (serverVersion > localVersion) {
-				LOGGER.info("[ToriiFind] 检测到云端配置文件有新版本，正在下载...");
-				downloadServerConfig(configFile);
-				LOGGER.info("[ToriiFind] 云端配置文件已更新到最新版本。");
+		String currentSourceUrl = getCurrentSourceUrl();
+		if (currentSourceUrl != null) {
+			try {
+				int localVersion = getConfigFileVersion(configFile);
+				int serverVersion = fetchServerConfigVersion(currentSourceUrl);
+				if (serverVersion > localVersion) {
+					LOGGER.info("[ToriiFind] 检测到云端配置文件有新版本，正在下载...");
+					downloadServerConfig(configFile, currentSourceUrl);
+					LOGGER.info("[ToriiFind] 云端配置文件已更新到最新版本。");
+				}
+			} catch (Exception e) {
+				LOGGER.warn("[ToriiFind] 检查或下载云端配置文件失败：" + e.getMessage());
 			}
-		} catch (Exception e) {
-			LOGGER.warn("[ToriiFind] 检查或下载云端配置文件失败：" + e.getMessage());
 		}
 	}
 	
@@ -105,11 +139,12 @@ public class ToriiFind implements ClientModInitializer {
 
 	/**
 	 * 获取云端配置文件的 version 字段
+	 * @param serverUrl 云端配置文件URL
 	 * @return 云端配置文件版本号（无 version 字段时返回 0）
 	 * @throws IOException 网络或解析异常
 	 */
-	private int fetchServerConfigVersion() throws IOException {
-		HttpURLConnection conn = (HttpURLConnection) new URL(SERVER_CONFIG_URL).openConnection();
+	private int fetchServerConfigVersion(String serverUrl) throws IOException {
+		HttpURLConnection conn = (HttpURLConnection) new URL(serverUrl).openConnection();
 		conn.setRequestMethod("GET");
 		conn.setConnectTimeout(5000);
 		conn.setReadTimeout(5000);
@@ -126,10 +161,11 @@ public class ToriiFind implements ClientModInitializer {
 	/**
 	 * 下载云端配置文件并覆盖本地配置文件
 	 * @param configFile 本地配置文件路径
+	 * @param serverUrl 云端配置文件URL
 	 * @throws IOException 网络或写入异常
 	 */
-	private void downloadServerConfig(Path configFile) throws IOException {
-		HttpURLConnection conn = (HttpURLConnection) new URL(SERVER_CONFIG_URL).openConnection();
+	private void downloadServerConfig(Path configFile, String serverUrl) throws IOException {
+		HttpURLConnection conn = (HttpURLConnection) new URL(serverUrl).openConnection();
 		conn.setRequestMethod("GET");
 		conn.setConnectTimeout(5000);
 		conn.setReadTimeout(5000);
