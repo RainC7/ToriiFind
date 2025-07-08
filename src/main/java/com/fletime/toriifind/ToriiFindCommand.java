@@ -334,10 +334,10 @@ public class ToriiFindCommand {
                                 info.append("§a[最新版本]");
                             }
                             
-                            // 显示版本信息
+                            // 显示版本信息（如果存在）
                             String version = com.fletime.toriifind.service.LocalDataService.getLocalVersion(
                                 com.fletime.toriifind.service.LocalDataService.getLocalDataFile(sourceName));
-                            if (version != null) {
+                            if (version != null && !version.isEmpty()) {
                                 info.append(" §7v").append(version);
                             }
                             

@@ -153,25 +153,15 @@ public class LocalDataService {
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
-            conn.setRequestProperty("Range", "bytes=0-1023");
+            conn.setRequestProperty("Range", "bytes=0-2047"); // 读取更多内容以确保找到正确的version字段
             
             if (conn.getResponseCode() == 200 || conn.getResponseCode() == 206) {
                 try (InputStream in = conn.getInputStream()) {
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[2048];
                     int bytesRead = in.read(buffer);
                     String content = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.UTF_8);
                     
-                    // 提取版本号
-                    if (content.contains("\"version\"")) {
-                        int start = content.indexOf("\"version\":");
-                        if (start >= 0) {
-                            start = content.indexOf("\"", start + 10) + 1;
-                            int end = content.indexOf("\"", start);
-                            if (end > start) {
-                                return content.substring(start, end);
-                            }
-                        }
-                    }
+                    return extractRootVersion(content);
                 }
             }
         } catch (Exception e) {
@@ -185,24 +175,80 @@ public class LocalDataService {
      */
     public static String getLocalVersion(Path localFile) {
         try {
-            byte[] firstKB = new byte[1024];
+            byte[] buffer = new byte[2048];
             try (InputStream in = Files.newInputStream(localFile)) {
-                int bytesRead = in.read(firstKB);
-                String content = new String(firstKB, 0, bytesRead, java.nio.charset.StandardCharsets.UTF_8);
+                int bytesRead = in.read(buffer);
+                String content = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.UTF_8);
                 
-                if (content.contains("\"version\"")) {
-                    int start = content.indexOf("\"version\":");
-                    if (start >= 0) {
-                        start = content.indexOf("\"", start + 10) + 1;
-                        int end = content.indexOf("\"", start);
-                        if (end > start) {
-                            return content.substring(start, end);
+                return extractRootVersion(content);
+            }
+        } catch (Exception e) {
+            // 忽略版本读取错误
+        }
+        return null;
+    }
+    
+    /**
+     * 从JSON内容中提取根级别的version字段
+     */
+    private static String extractRootVersion(String content) {
+        try {
+            // 使用Gson解析JSON以确保只获取根级别的version
+            com.google.gson.JsonObject jsonObject = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
+            if (jsonObject.has("version")) {
+                com.google.gson.JsonElement versionElement = jsonObject.get("version");
+                if (versionElement.isJsonPrimitive()) {
+                    // 处理数字或字符串类型的版本号
+                    return versionElement.getAsString();
+                }
+            }
+        } catch (Exception e) {
+            // JSON解析失败，使用简单字符串匹配作为fallback
+            // 查找 "version": 在JSON开头附近，避免获取嵌套对象中的version
+            int jsonStart = content.indexOf("{");
+            if (jsonStart >= 0) {
+                // 只在JSON开始后的前500个字符内查找
+                String jsonHead = content.substring(jsonStart, Math.min(content.length(), jsonStart + 500));
+                
+                if (jsonHead.contains("\"version\"")) {
+                    int versionIndex = jsonHead.indexOf("\"version\":");
+                    // 确保这个version在第一层级（检查前面是否有嵌套的大括号）
+                    String beforeVersion = jsonHead.substring(0, versionIndex);
+                    long openBraces = beforeVersion.chars().filter(ch -> ch == '{').count();
+                    long closeBraces = beforeVersion.chars().filter(ch -> ch == '}').count();
+                    
+                    // 如果大括号平衡，说明我们在根级别
+                    if (openBraces == closeBraces + 1) {
+                        int valueStart = versionIndex + 10; // "version":的长度
+                        // 跳过空格和冒号
+                        while (valueStart < jsonHead.length() && (jsonHead.charAt(valueStart) == ' ' || jsonHead.charAt(valueStart) == ':')) {
+                            valueStart++;
+                        }
+                        
+                        if (valueStart < jsonHead.length()) {
+                            char firstChar = jsonHead.charAt(valueStart);
+                            if (firstChar == '"') {
+                                // 字符串版本号
+                                int start = valueStart + 1;
+                                int end = jsonHead.indexOf("\"", start);
+                                if (end > start) {
+                                    return jsonHead.substring(start, end);
+                                }
+                            } else if (Character.isDigit(firstChar)) {
+                                // 数字版本号
+                                int end = valueStart;
+                                while (end < jsonHead.length() && 
+                                       (Character.isDigit(jsonHead.charAt(end)) || jsonHead.charAt(end) == '.')) {
+                                    end++;
+                                }
+                                if (end > valueStart) {
+                                    return jsonHead.substring(valueStart, end);
+                                }
+                            }
                         }
                     }
                 }
             }
-        } catch (Exception e) {
-            // 忽略版本读取错误
         }
         return null;
     }
