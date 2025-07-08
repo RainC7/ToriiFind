@@ -419,15 +419,34 @@ public class ToriiFindCommand {
         try {
             SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
             if (currentSource.isApiMode()) {
-                // API模式：直接查询
-                LynnApiService.LynnLandmark landmark = LynnApiService.getLandmarkById(
-                    currentSource.getApiBaseUrl(), source, number);
+                // API模式：异步查询
+                context.getSource().sendFeedback(Text.literal("§6正在查询..."));
                 
-                List<LynnApiService.LynnLandmark> results = new ArrayList<>();
-                if (landmark != null) {
-                    results.add(landmark);
-                }
-                displayLynnResults(context, results);
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try {
+                        LynnApiService.LynnLandmark landmark = LynnApiService.getLandmarkById(
+                            currentSource.getApiBaseUrl(), source, number);
+                        
+                        List<LynnApiService.LynnLandmark> results = new ArrayList<>();
+                        if (landmark != null) {
+                            results.add(landmark);
+                        }
+                        return results;
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }).thenAcceptAsync(results -> {
+                    // 在主线程显示结果
+                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                        displayLynnResults(context, results);
+                    });
+                }).exceptionally(throwable -> {
+                    // 在主线程显示错误
+                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                        context.getSource().sendError(ToriiFind.translate("toriifind.error.config", throwable.getMessage()));
+                    });
+                    return null;
+                });
             } else {
                 // JSON模式：加载所有数据然后过滤
                 List<LynnApiService.LynnLandmark> allLandmarks = LynnJsonService.loadFromDataSource(currentSource);
@@ -530,18 +549,35 @@ public class ToriiFindCommand {
     private static int searchLynnByName(CommandContext<FabricClientCommandSource> context, String keyword, String source) {
         try {
             SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
-            List<LynnApiService.LynnLandmark> results;
             
             if (currentSource.isApiMode()) {
-                // API模式：直接查询
-                results = LynnApiService.searchLandmarks(currentSource.getApiBaseUrl(), source, keyword);
+                // API模式：异步查询
+                context.getSource().sendFeedback(Text.literal("§6正在查询..."));
+                
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return LynnApiService.searchLandmarks(currentSource.getApiBaseUrl(), source, keyword);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }).thenAcceptAsync(results -> {
+                    // 在主线程显示结果
+                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                        displayLynnResults(context, results);
+                    });
+                }).exceptionally(throwable -> {
+                    // 在主线程显示错误
+                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                        context.getSource().sendError(ToriiFind.translate("toriifind.error.config", throwable.getMessage()));
+                    });
+                    return null;
+                });
             } else {
                 // JSON模式：加载所有数据然后过滤
                 List<LynnApiService.LynnLandmark> allLandmarks = LynnJsonService.loadFromDataSource(currentSource);
-                results = LynnJsonService.filterByNameOrPinyin(allLandmarks, keyword, ToriiFindCommand::toPinyin);
+                List<LynnApiService.LynnLandmark> results = LynnJsonService.filterByNameOrPinyin(allLandmarks, keyword, ToriiFindCommand::toPinyin);
+                displayLynnResults(context, results);
             }
-            
-            displayLynnResults(context, results);
         } catch (Exception e) {
             context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
         }

@@ -227,7 +227,7 @@ public class SourceConfig {
         ));
         
         config.currentSource = "fletime";
-        config.version = 1;
+        config.version = 2;
         
         // 不再自动保存，由调用者决定是否保存
         
@@ -259,7 +259,7 @@ public class SourceConfig {
         
         // 只有在版本升级时才添加新的数据源
         // 如果用户删除了某个数据源，我们不应该自动添加回来
-        if (config.version < 1) {
+        if (config.version < 2) {
             // 检查并添加fletime源
             if (!config.sources.containsKey("fletime")) {
                 config.sources.put("fletime", new DataSource(
@@ -300,7 +300,7 @@ public class SourceConfig {
             
             // 更新版本号
             if (needsSave) {
-                config.version = 1;
+                config.version = 2;
                 config.save();
                 System.out.println("[ToriiFind] 已添加新的默认数据源");
             }
@@ -317,6 +317,9 @@ public class SourceConfig {
             options.setPrettyFlow(true);
             
             Representer representer = new Representer(options);
+            // 禁用全局标签，避免类型标签出现在YAML文件中
+            representer.addClassTag(SourceConfig.class, org.yaml.snakeyaml.nodes.Tag.MAP);
+            representer.addClassTag(DataSource.class, org.yaml.snakeyaml.nodes.Tag.MAP);
             
             Yaml yaml = new Yaml(representer, options);
             
