@@ -4,6 +4,7 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 import org.yaml.snakeyaml.representer.Representer;
 import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.LoaderOptions;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.FileInputStream;
@@ -123,7 +124,9 @@ public class SourceConfig {
         }
         
         try {
-            Yaml yaml = new Yaml(new Constructor(SourceConfig.class));
+            LoaderOptions loaderOptions = new LoaderOptions();
+            Constructor constructor = new Constructor(SourceConfig.class, loaderOptions);
+            Yaml yaml = new Yaml(constructor);
             try (FileInputStream inputStream = new FileInputStream(configFile.toFile())) {
                 SourceConfig config = yaml.load(inputStream);
                 if (config == null) {
@@ -187,7 +190,6 @@ public class SourceConfig {
             options.setPrettyFlow(true);
             
             Representer representer = new Representer(options);
-            representer.addClassTag(SourceConfig.class, org.yaml.snakeyaml.common.NonPrintableStyle.BINARY);
             
             Yaml yaml = new Yaml(representer, options);
             
