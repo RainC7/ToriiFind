@@ -28,6 +28,7 @@ import com.fletime.toriifind.config.SourceConfig;
 import com.fletime.toriifind.service.LynnApiService;
 import com.fletime.toriifind.service.LynnJsonService;
 import com.fletime.toriifind.service.SourceStatusService;
+import com.fletime.toriifind.service.AsyncSourceStatusService;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -190,7 +191,11 @@ public class ToriiFindCommand {
                     .then(literal("current")
                         .executes(context -> showCurrentSource(context)))
                     .then(literal("status")
-                        .executes(context -> showSourcesStatus(context))))
+                        .executes(context -> showSourcesStatus(context)))
+                    .then(literal("check")
+                        .executes(context -> checkCurrentSource(context)))
+                    .then(literal("reload")
+                        .executes(context -> reloadConfig(context))))
                 .then(literal("ciallo")
                     .executes(context -> sendCialloMessage(context)))
         );
@@ -211,7 +216,9 @@ public class ToriiFindCommand {
         context.getSource().sendFeedback(Text.literal("§6/toriifind source list §f- 列出所有可用的数据源"));
         context.getSource().sendFeedback(Text.literal("§6/toriifind source switch <name> §f- 切换到指定数据源"));
         context.getSource().sendFeedback(Text.literal("§6/toriifind source current §f- 显示当前使用的数据源"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source check §f- 快速检查当前数据源状态"));
         context.getSource().sendFeedback(Text.literal("§6/toriifind source status §f- 检查所有数据源连接状态"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source reload §f- 重新加载配置文件"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.ciallo"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         return 1;
@@ -291,43 +298,83 @@ public class ToriiFindCommand {
     }
     
     /**
-     * 显示所有数据源的连接状态
+     * 显示所有数据源的连接状态（异步版本）
      */
     private static int showSourcesStatus(CommandContext<FabricClientCommandSource> context) {
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
-        context.getSource().sendFeedback(Text.literal("§6数据源连接状态检测中..."));
         
         Map<String, SourceConfig.DataSource> sources = ToriiFind.getAllSources();
-        Map<String, SourceStatusService.SourceStatus> statusMap = SourceStatusService.getAllSourcesStatus(sources);
         
-        context.getSource().sendFeedback(Text.literal(""));
+        // 使用异步检测服务
+        AsyncSourceStatusService.checkAllSourcesAsync(context.getSource(), sources);
         
-        for (Map.Entry<String, SourceConfig.DataSource> entry : sources.entrySet()) {
-            String name = entry.getKey();
-            SourceConfig.DataSource source = entry.getValue();
-            SourceStatusService.SourceStatus status = statusMap.get(name);
-            
-            String mode = source.isApiMode() ? "API模式" : "JSON模式";
-            
-            StringBuilder info = new StringBuilder();
-            info.append("§6").append(name).append(" §f(").append(mode).append(") ");
-            info.append(status.getStatusText());
-            
-            // 显示版本信息
-            if (status.getVersion() != null) {
-                info.append(" §7版本: ").append(status.getVersion());
-            }
-            
-            context.getSource().sendFeedback(Text.literal(info.toString()));
-            
-            // 显示镜像状态（Lynn JSON模式）
-            if (!source.isApiMode() && source.getMirrorUrls() != null && source.getMirrorUrls().length > 0) {
-                context.getSource().sendFeedback(Text.literal("  §7主地址: " + (status.isAvailable() ? "§a可用" : "§c不可用")));
-                context.getSource().sendFeedback(Text.literal("  §7镜像地址: " + source.getMirrorUrls().length + " 个备用"));
-            }
+        return 1;
+    }
+    
+    /**
+     * 快速检查当前数据源状态
+     */
+    private static int checkCurrentSource(CommandContext<FabricClientCommandSource> context) {
+        String currentSourceName = ToriiFind.getCurrentSourceName();
+        SourceConfig.DataSource currentSource = ToriiFind.getAllSources().get(currentSourceName);
+        
+        if (currentSource == null) {
+            context.getSource().sendError(Text.literal("§c当前数据源配置异常"));
+            return 1;
         }
         
-        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        context.getSource().sendFeedback(Text.literal("§6正在检查当前数据源: §a" + currentSourceName + " §7..."));
+        
+        // 异步检查当前数据源
+        java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            return SourceStatusService.checkSourceStatus(currentSource);
+        }).thenAcceptAsync(status -> {
+            // 在主线程显示结果
+            net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                String mode = currentSource.isApiMode() ? "API模式" : "JSON模式";
+                
+                StringBuilder info = new StringBuilder();
+                info.append("§6").append(currentSourceName).append(" §f(").append(mode).append(") ");
+                info.append(status.getStatusText());
+                
+                if (status.getVersion() != null) {
+                    info.append(" §7版本: ").append(status.getVersion());
+                }
+                
+                context.getSource().sendFeedback(Text.literal(info.toString()));
+                
+                // 显示镜像信息
+                if (!currentSource.isApiMode() && currentSource.getMirrorUrls() != null && currentSource.getMirrorUrls().length > 0) {
+                    context.getSource().sendFeedback(Text.literal("§7镜像地址: " + currentSource.getMirrorUrls().length + " 个备用"));
+                }
+            });
+        });
+        
+        return 1;
+    }
+    
+    /**
+     * 重新加载配置文件
+     */
+    private static int reloadConfig(CommandContext<FabricClientCommandSource> context) {
+        context.getSource().sendFeedback(Text.literal("§6正在重新加载配置文件..."));
+        
+        boolean success = ToriiFind.reloadConfig();
+        
+        if (success) {
+            context.getSource().sendFeedback(Text.literal("§a✓ 配置文件已成功重新加载"));
+            
+            // 显示当前数据源信息
+            String currentSource = ToriiFind.getCurrentSourceName();
+            SourceConfig.DataSource source = ToriiFind.getAllSources().get(currentSource);
+            if (source != null) {
+                String mode = source.isApiMode() ? "API模式" : "JSON模式";
+                context.getSource().sendFeedback(Text.literal("§6当前数据源: §a" + currentSource + " §f(" + mode + ")"));
+            }
+        } else {
+            context.getSource().sendError(Text.literal("§c✗ 配置文件重新加载失败，请检查配置文件格式"));
+        }
+        
         return 1;
     }
 

@@ -76,8 +76,8 @@ public class SourceStatusService {
             long startTime = System.currentTimeMillis();
             HttpURLConnection conn = (HttpURLConnection) new URL(healthUrl).openConnection();
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(3000);
-            conn.setReadTimeout(3000);
+            conn.setConnectTimeout(2000);  // 减少到2秒
+            conn.setReadTimeout(2000);     // 减少到2秒
             conn.setRequestProperty("Accept", "application/json");
             
             int responseCode = conn.getResponseCode();
@@ -135,8 +135,8 @@ public class SourceStatusService {
             long startTime = System.currentTimeMillis();
             HttpURLConnection conn = (HttpURLConnection) new URL(jsonUrl).openConnection();
             conn.setRequestMethod("HEAD");  // 使用HEAD请求减少流量
-            conn.setConnectTimeout(3000);
-            conn.setReadTimeout(3000);
+            conn.setConnectTimeout(2000);   // 减少到2秒
+            conn.setReadTimeout(2000);      // 减少到2秒
             
             int responseCode = conn.getResponseCode();
             long responseTime = System.currentTimeMillis() - startTime;
@@ -160,8 +160,8 @@ public class SourceStatusService {
         try {
             HttpURLConnection conn = (HttpURLConnection) new URL(jsonUrl).openConnection();
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(2000);
-            conn.setReadTimeout(2000);
+            conn.setConnectTimeout(1500);  // 减少版本检测超时
+            conn.setReadTimeout(1500);
             
             try (InputStream in = conn.getInputStream()) {
                 String content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
@@ -190,8 +190,8 @@ public class SourceStatusService {
             
             HttpURLConnection conn = (HttpURLConnection) new URL(versionUrl).openConnection();
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(2000);
-            conn.setReadTimeout(2000);
+            conn.setConnectTimeout(1500);  // 减少版本检测超时
+            conn.setReadTimeout(1500);
             conn.setRequestProperty("Accept", "application/json");
             
             if (conn.getResponseCode() == 200) {

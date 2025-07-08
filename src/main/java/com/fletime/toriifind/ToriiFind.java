@@ -64,6 +64,21 @@ public class ToriiFind implements ClientModInitializer {
 	}
 	
 	/**
+	 * 重新加载配置文件
+	 */
+	public static boolean reloadConfig() {
+		try {
+			SourceConfig newConfig = SourceConfig.loadOrCreateDefault();
+			sourceConfig = newConfig;
+			LOGGER.info("[ToriiFind] 配置文件已重新加载");
+			return true;
+		} catch (Exception e) {
+			LOGGER.error("[ToriiFind] 配置文件重载失败: " + e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
 	 * 检查本地配置文件是否存在或版本过低，必要时释放默认配置。
 	 * 然后与云端配置文件比对版本，自动下载新版本覆盖本地。
 	 */
