@@ -58,19 +58,33 @@ jobs:
         run: |
           echo "Merged file content:"
           cat data/lynn.json | jq '.'
+          echo "File size: $(wc -c < data/lynn.json) bytes"
+          
+      - name: Check git status
+        run: |
+          echo "Git status before commit:"
+          git status
+          echo "Files in data directory:"
+          ls -la data/
           
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # 检查是否有变更
-          if git diff --quiet; then
+          # 添加文件到 git
+          git add data/lynn.json
+          
+          # 检查是否有变更（包括新文件）
+          if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
           fi
           
-          git add data/lynn.json
+          # 显示将要提交的变更
+          echo "Changes to commit:"
+          git diff --cached --name-status
+          
           git commit -m "Auto-update lynn data source - $(date +%Y%m%d)"
           git push
           
