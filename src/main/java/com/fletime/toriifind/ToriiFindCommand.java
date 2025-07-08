@@ -24,6 +24,10 @@ import net.sourceforge.pinyin4j.format.HanyuPinyinCaseType;
 import net.sourceforge.pinyin4j.format.HanyuPinyinOutputFormat;
 import net.sourceforge.pinyin4j.format.HanyuPinyinToneType;
 import net.sourceforge.pinyin4j.format.exception.BadHanyuPinyinOutputFormatCombination;
+import com.fletime.toriifind.config.SourceConfig;
+import com.fletime.toriifind.service.LynnApiService;
+import com.fletime.toriifind.service.LynnJsonService;
+import com.fletime.toriifind.service.SourceStatusService;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -31,6 +35,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
@@ -150,6 +155,10 @@ public class ToriiFindCommand {
      * /toriifind zeroth name <keyword>
      * /toriifind houtu num <number>
      * /toriifind houtu name <keyword>
+     * /toriifind source list
+     * /toriifind source switch <name>
+     * /toriifind source current
+     * /toriifind source status
      * /toriifind ciallo
      */
     private static void registerCommands(CommandDispatcher<FabricClientCommandSource> dispatcher) {
@@ -172,6 +181,16 @@ public class ToriiFindCommand {
                     .then(literal("name")
                         .then(argument("keyword", StringArgumentType.greedyString())
                             .executes(context -> searchHoutuByNameOrPinyin(context, StringArgumentType.getString(context, "keyword"))))))
+                .then(literal("source")
+                    .then(literal("list")
+                        .executes(context -> listSources(context)))
+                    .then(literal("switch")
+                        .then(argument("name", StringArgumentType.string())
+                            .executes(context -> switchSource(context, StringArgumentType.getString(context, "name")))))
+                    .then(literal("current")
+                        .executes(context -> showCurrentSource(context)))
+                    .then(literal("status")
+                        .executes(context -> showSourcesStatus(context))))
                 .then(literal("ciallo")
                     .executes(context -> sendCialloMessage(context)))
         );
@@ -189,7 +208,125 @@ public class ToriiFindCommand {
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.zeroth_name"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.houtu_num"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.houtu_name"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source list §f- 列出所有可用的数据源"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source switch <name> §f- 切换到指定数据源"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source current §f- 显示当前使用的数据源"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source status §f- 检查所有数据源连接状态"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.ciallo"));
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        return 1;
+    }
+    
+    /**
+     * 列出所有可用的数据源
+     */
+    private static int listSources(CommandContext<FabricClientCommandSource> context) {
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        context.getSource().sendFeedback(Text.literal("§6可用的数据源："));
+        
+        Map<String, SourceConfig.DataSource> sources = ToriiFind.getAllSources();
+        String currentSource = ToriiFind.getCurrentSourceName();
+        
+        for (Map.Entry<String, SourceConfig.DataSource> entry : sources.entrySet()) {
+            String name = entry.getKey();
+            SourceConfig.DataSource source = entry.getValue();
+            
+            String prefix = name.equals(currentSource) ? "§a[当前] " : "§7";
+            String status = source.isEnabled() ? "§a[启用]" : "§c[禁用]";
+            String mode = source.isApiMode() ? "§b[API模式]" : "§e[JSON模式]";
+            
+            StringBuilder info = new StringBuilder();
+            info.append(prefix).append(name).append(" ").append(status).append(" ").append(mode);
+            info.append(" §f- ").append(source.getName());
+            
+            // 显示版本信息（如果有）
+            if (source.getVersion() != null) {
+                info.append(" §7(").append(source.getVersion()).append(")");
+            }
+            
+            context.getSource().sendFeedback(Text.literal(info.toString()));
+            
+            // 显示镜像信息
+            if (!source.isApiMode() && source.getMirrorUrls() != null && source.getMirrorUrls().length > 0) {
+                context.getSource().sendFeedback(Text.literal("  §7镜像地址: " + source.getMirrorUrls().length + " 个可用"));
+            }
+        }
+        
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        return 1;
+    }
+    
+    /**
+     * 切换数据源
+     */
+    private static int switchSource(CommandContext<FabricClientCommandSource> context, String sourceName) {
+        if (ToriiFind.switchSource(sourceName)) {
+            context.getSource().sendFeedback(Text.literal("§a成功切换到数据源：" + sourceName));
+        } else {
+            context.getSource().sendError(Text.literal("§c切换失败：数据源 '" + sourceName + "' 不存在或未启用"));
+        }
+        return 1;
+    }
+    
+    /**
+     * 显示当前数据源
+     */
+    private static int showCurrentSource(CommandContext<FabricClientCommandSource> context) {
+        String currentSource = ToriiFind.getCurrentSourceName();
+        SourceConfig.DataSource source = ToriiFind.getAllSources().get(currentSource);
+        
+        if (source != null) {
+            String mode = source.isApiMode() ? "API模式" : "JSON模式";
+            context.getSource().sendFeedback(Text.literal("§6当前数据源：§a" + currentSource + " §f- " + source.getName() + " §7(" + mode + ")"));
+            
+            if (source.isApiMode() && source.getApiBaseUrl() != null) {
+                context.getSource().sendFeedback(Text.literal("§7API地址：" + source.getApiBaseUrl()));
+            } else if (!source.isApiMode() && source.getUrl() != null) {
+                context.getSource().sendFeedback(Text.literal("§7JSON地址：" + source.getUrl()));
+            }
+        } else {
+            context.getSource().sendError(Text.literal("§c当前数据源配置异常"));
+        }
+        return 1;
+    }
+    
+    /**
+     * 显示所有数据源的连接状态
+     */
+    private static int showSourcesStatus(CommandContext<FabricClientCommandSource> context) {
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        context.getSource().sendFeedback(Text.literal("§6数据源连接状态检测中..."));
+        
+        Map<String, SourceConfig.DataSource> sources = ToriiFind.getAllSources();
+        Map<String, SourceStatusService.SourceStatus> statusMap = SourceStatusService.getAllSourcesStatus(sources);
+        
+        context.getSource().sendFeedback(Text.literal(""));
+        
+        for (Map.Entry<String, SourceConfig.DataSource> entry : sources.entrySet()) {
+            String name = entry.getKey();
+            SourceConfig.DataSource source = entry.getValue();
+            SourceStatusService.SourceStatus status = statusMap.get(name);
+            
+            String mode = source.isApiMode() ? "API模式" : "JSON模式";
+            
+            StringBuilder info = new StringBuilder();
+            info.append("§6").append(name).append(" §f(").append(mode).append(") ");
+            info.append(status.getStatusText());
+            
+            // 显示版本信息
+            if (status.getVersion() != null) {
+                info.append(" §7版本: ").append(status.getVersion());
+            }
+            
+            context.getSource().sendFeedback(Text.literal(info.toString()));
+            
+            // 显示镜像状态（Lynn JSON模式）
+            if (!source.isApiMode() && source.getMirrorUrls() != null && source.getMirrorUrls().length > 0) {
+                context.getSource().sendFeedback(Text.literal("  §7主地址: " + (status.isAvailable() ? "§a可用" : "§c不可用")));
+                context.getSource().sendFeedback(Text.literal("  §7镜像地址: " + source.getMirrorUrls().length + " 个备用"));
+            }
+        }
+        
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
         return 1;
     }
@@ -198,6 +335,21 @@ public class ToriiFindCommand {
      * 按编号查找零洲鸟居
      */
     private static int searchZerothByNumber(CommandContext<FabricClientCommandSource> context, int number) {
+        SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
+        
+        if (currentSource != null && currentSource.isApiMode()) {
+            // Lynn API模式
+            return searchLynnByNumber(context, String.valueOf(number), "zth");
+        } else {
+            // 传统JSON模式
+            return searchZerothByNumberJson(context, number);
+        }
+    }
+    
+    /**
+     * 传统JSON模式按编号查找零洲鸟居
+     */
+    private static int searchZerothByNumberJson(CommandContext<FabricClientCommandSource> context, int number) {
         List<Torii> results = new ArrayList<>();
         try {
             List<Torii> toriiList = loadZerothData();
@@ -212,11 +364,93 @@ public class ToriiFindCommand {
         }
         return 1;
     }
+    
+    /**
+     * Lynn源按编号搜索
+     */
+    private static int searchLynnByNumber(CommandContext<FabricClientCommandSource> context, String number, String source) {
+        try {
+            SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
+            if (currentSource.isApiMode()) {
+                // API模式：直接查询
+                LynnApiService.LynnLandmark landmark = LynnApiService.getLandmarkById(
+                    currentSource.getApiBaseUrl(), source, number);
+                
+                List<LynnApiService.LynnLandmark> results = new ArrayList<>();
+                if (landmark != null) {
+                    results.add(landmark);
+                }
+                displayLynnResults(context, results);
+            } else {
+                // JSON模式：加载所有数据然后过滤
+                List<LynnApiService.LynnLandmark> allLandmarks = LynnJsonService.loadFromDataSource(currentSource);
+                List<LynnApiService.LynnLandmark> results = LynnJsonService.filterById(allLandmarks, number);
+                displayLynnResults(context, results);
+            }
+        } catch (Exception e) {
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
+        }
+        return 1;
+    }
+    
+    /**
+     * 展示Lynn源搜索结果
+     */
+    private static void displayLynnResults(CommandContext<FabricClientCommandSource> context, List<LynnApiService.LynnLandmark> results) {
+        context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        if (results.isEmpty()) {
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.result.not_found"));
+        } else {
+            for (LynnApiService.LynnLandmark landmark : results) {
+                // 基础信息
+                String formattedText = String.format(
+                    ToriiFind.translate("toriifind.result.format.entry").getString(),
+                    landmark.getId(), landmark.getGrade(), landmark.getName()
+                );
+                
+                // 添加坐标信息
+                if (landmark.getCoordinates() != null && !landmark.getCoordinates().isUnknown()) {
+                    formattedText += " §7" + landmark.getCoordinates().toString();
+                }
+                
+                // 添加状态信息
+                if (!"Normal".equals(landmark.getStatus())) {
+                    formattedText += " §c[" + landmark.getStatus() + "]";
+                }
+                
+                MutableText baseText = Text.literal(formattedText + " ");
+                String wikiUrl = "https://wiki.ria.red/wiki/" + landmark.getName();
+                Style linkStyle = Style.EMPTY
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, wikiUrl))
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
+                                                  ToriiFind.translate("toriifind.result.wiki_hover", wikiUrl)))
+                    .withFormatting(Formatting.UNDERLINE);
+                MutableText linkText = ((MutableText)ToriiFind.translate("toriifind.result.wiki_link")).setStyle(linkStyle);
+                context.getSource().sendFeedback(baseText.append(linkText));
+            }
+            context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        }
+    }
 
     /**
      * 按名称或拼音查找零洲鸟居
      */
     private static int searchZerothByNameOrPinyin(CommandContext<FabricClientCommandSource> context, String keyword) {
+        SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
+        
+        if (currentSource != null && currentSource.isApiMode()) {
+            // Lynn API模式
+            return searchLynnByName(context, keyword, "zth");
+        } else {
+            // 传统JSON模式
+            return searchZerothByNameOrPinyinJson(context, keyword);
+        }
+    }
+    
+    /**
+     * 传统JSON模式按名称或拼音查找零洲鸟居
+     */
+    private static int searchZerothByNameOrPinyinJson(CommandContext<FabricClientCommandSource> context, String keyword) {
         List<Torii> results = new ArrayList<>();
         try {
             List<Torii> toriiList = loadZerothData();
@@ -242,11 +476,50 @@ public class ToriiFindCommand {
         }
         return 1;
     }
+    
+    /**
+     * Lynn源按名称搜索
+     */
+    private static int searchLynnByName(CommandContext<FabricClientCommandSource> context, String keyword, String source) {
+        try {
+            SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
+            List<LynnApiService.LynnLandmark> results;
+            
+            if (currentSource.isApiMode()) {
+                // API模式：直接查询
+                results = LynnApiService.searchLandmarks(currentSource.getApiBaseUrl(), source, keyword);
+            } else {
+                // JSON模式：加载所有数据然后过滤
+                List<LynnApiService.LynnLandmark> allLandmarks = LynnJsonService.loadFromDataSource(currentSource);
+                results = LynnJsonService.filterByNameOrPinyin(allLandmarks, keyword, ToriiFindCommand::toPinyin);
+            }
+            
+            displayLynnResults(context, results);
+        } catch (Exception e) {
+            context.getSource().sendError(ToriiFind.translate("toriifind.error.config", e.getMessage()));
+        }
+        return 1;
+    }
 
     /**
      * 按编号查找后土境地
      */
     private static int searchHoutuByNumber(CommandContext<FabricClientCommandSource> context, String number) {
+        SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
+        
+        if (currentSource != null && currentSource.isApiMode()) {
+            // Lynn API模式
+            return searchLynnByNumber(context, number, "houtu");
+        } else {
+            // 传统JSON模式
+            return searchHoutuByNumberJson(context, number);
+        }
+    }
+    
+    /**
+     * 传统JSON模式按编号查找后土境地
+     */
+    private static int searchHoutuByNumberJson(CommandContext<FabricClientCommandSource> context, String number) {
         List<Houtu> results = new ArrayList<>();
         try {
             List<Houtu> houtuList = loadHoutuData();
@@ -266,6 +539,21 @@ public class ToriiFindCommand {
      * 按名称或拼音查找后土境地
      */
     private static int searchHoutuByNameOrPinyin(CommandContext<FabricClientCommandSource> context, String keyword) {
+        SourceConfig.DataSource currentSource = ToriiFind.getSourceConfig().getCurrentDataSource();
+        
+        if (currentSource != null && currentSource.isApiMode()) {
+            // Lynn API模式
+            return searchLynnByName(context, keyword, "houtu");
+        } else {
+            // 传统JSON模式
+            return searchHoutuByNameOrPinyinJson(context, keyword);
+        }
+    }
+    
+    /**
+     * 传统JSON模式按名称或拼音查找后土境地
+     */
+    private static int searchHoutuByNameOrPinyinJson(CommandContext<FabricClientCommandSource> context, String keyword) {
         List<Houtu> results = new ArrayList<>();
         try {
             List<Houtu> houtuList = loadHoutuData();
