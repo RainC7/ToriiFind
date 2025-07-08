@@ -120,7 +120,9 @@ public class SourceConfig {
         Path configFile = getConfigPath();
         
         if (!Files.exists(configFile)) {
-            return createDefaultConfig();
+            SourceConfig config = createDefaultConfig();
+            config.save(); // 只在文件不存在时保存
+            return config;
         }
         
         try {
@@ -130,12 +132,58 @@ public class SourceConfig {
             try (FileInputStream inputStream = new FileInputStream(configFile.toFile())) {
                 SourceConfig config = yaml.load(inputStream);
                 if (config == null) {
-                    return createDefaultConfig();
+                    // 文件存在但为空，创建备份后重新创建
+                    backupConfigFile();
+                    SourceConfig newConfig = createDefaultConfig();
+                    newConfig.save();
+                    return newConfig;
                 }
+                
+                // 验证配置完整性，如果缺少关键字段则补充
+                if (config.sources == null) {
+                    config.sources = new HashMap<>();
+                }
+                
+                // 检查是否需要添加新的默认数据源（用于版本升级）
+                addMissingDefaultSources(config);
+                
                 return config;
             }
         } catch (Exception e) {
-            return createDefaultConfig();
+            // 解析失败，创建备份后重新创建
+            System.err.println("[ToriiFind] 配置文件解析失败: " + e.getMessage());
+            System.err.println("[ToriiFind] 这可能是由于配置文件格式错误或损坏导致的");
+            backupConfigFile();
+            
+            // 询问用户是否要重置配置
+            System.out.println("[ToriiFind] 将创建新的默认配置文件，原配置已备份");
+            
+            SourceConfig newConfig = createDefaultConfig();
+            newConfig.save();
+            return newConfig;
+        }
+    }
+    
+    /**
+     * 验证配置文件格式
+     */
+    public static boolean validateConfig() {
+        Path configFile = getConfigPath();
+        if (!Files.exists(configFile)) {
+            return false;
+        }
+        
+        try {
+            LoaderOptions loaderOptions = new LoaderOptions();
+            Constructor constructor = new Constructor(SourceConfig.class, loaderOptions);
+            Yaml yaml = new Yaml(constructor);
+            try (FileInputStream inputStream = new FileInputStream(configFile.toFile())) {
+                SourceConfig config = yaml.load(inputStream);
+                return config != null && config.sources != null && !config.sources.isEmpty();
+            }
+        } catch (Exception e) {
+            System.err.println("[ToriiFind] 配置文件验证失败: " + e.getMessage());
+            return false;
         }
     }
     
@@ -167,17 +215,83 @@ public class SourceConfig {
             null,
             true,
             DataSource.SourceType.API,
-            "https://ria-data.vercel.app",
+            "https://ria-data.api.lynn6.top",
             null
         ));
         
         config.currentSource = "fletime";
         config.version = 1;
         
-        // 自动保存默认配置
-        config.save();
+        // 不再自动保存，由调用者决定是否保存
         
         return config;
+    }
+    
+    /**
+     * 备份现有配置文件
+     */
+    private static void backupConfigFile() {
+        try {
+            Path configFile = getConfigPath();
+            if (Files.exists(configFile)) {
+                Path backupFile = configFile.getParent().resolve("toriifind-sources.yml.backup");
+                Files.copy(configFile, backupFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                System.out.println("[ToriiFind] 已备份配置文件到: " + backupFile);
+            }
+        } catch (Exception e) {
+            System.err.println("[ToriiFind] 备份配置文件失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 为现有配置添加缺失的默认数据源（用于版本升级）
+     */
+    private static void addMissingDefaultSources(SourceConfig config) {
+        boolean needsSave = false;
+        
+        // 检查并添加fletime源
+        if (!config.sources.containsKey("fletime")) {
+            config.sources.put("fletime", new DataSource(
+                "FleTime源",
+                "https://wiki.ria.red/wiki/%E7%94%A8%E6%88%B7:FleTime/toriifind.json?action=raw",
+                true
+            ));
+            needsSave = true;
+        }
+        
+        // 检查并添加lynn-json源
+        if (!config.sources.containsKey("lynn-json")) {
+            config.sources.put("lynn-json", new DataSource(
+                "Lynn源 (JSON模式)",
+                "https://github.com/7N4D6Un/ToriiFind/raw/refs/heads/main/data/lynn.json",
+                true,
+                new String[]{
+                    "https://raw.kkgithub.com/7N4D6Un/ToriiFind/main/data/lynn.json",
+                    "https://fastly.jsdelivr.net/gh/7N4D6Un/ToriiFind@main/data/lynn.json"
+                },
+                null
+            ));
+            needsSave = true;
+        }
+        
+        // 检查并添加lynn-api源
+        if (!config.sources.containsKey("lynn-api")) {
+            config.sources.put("lynn-api", new DataSource(
+                "Lynn源 (API模式)",
+                null,
+                true,
+                DataSource.SourceType.API,
+                "https://ria-data.api.lynn6.top",
+                null
+            ));
+            needsSave = true;
+        }
+        
+        // 如果添加了新源，保存配置
+        if (needsSave) {
+            config.save();
+            System.out.println("[ToriiFind] 已添加新的默认数据源");
+        }
     }
     
     public void save() {
@@ -196,8 +310,46 @@ public class SourceConfig {
             try (FileWriter writer = new FileWriter(configFile.toFile())) {
                 yaml.dump(this, writer);
             }
+            
+            System.out.println("[ToriiFind] 配置文件已保存");
         } catch (IOException e) {
-            // 静默失败，不影响主要功能
+            System.err.println("[ToriiFind] 保存配置文件失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 安全保存 - 只在确实有变化时保存
+     */
+    public void safeSave() {
+        try {
+            Path configFile = getConfigPath();
+            
+            // 如果文件不存在，直接保存
+            if (!Files.exists(configFile)) {
+                save();
+                return;
+            }
+            
+            // 读取现有文件内容并比较
+            try {
+                SourceConfig existing = loadOrCreateDefault();
+                
+                // 比较关键配置是否有变化
+                boolean hasChanges = !this.currentSource.equals(existing.currentSource) ||
+                                   !this.sources.equals(existing.sources) ||
+                                   this.version != existing.version;
+                
+                if (hasChanges) {
+                    save();
+                } else {
+                    System.out.println("[ToriiFind] 配置无变化，跳过保存");
+                }
+            } catch (Exception e) {
+                // 比较失败，直接保存
+                save();
+            }
+        } catch (Exception e) {
+            System.err.println("[ToriiFind] 安全保存失败: " + e.getMessage());
         }
     }
     

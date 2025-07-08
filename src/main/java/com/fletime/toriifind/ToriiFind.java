@@ -48,7 +48,7 @@ public class ToriiFind implements ClientModInitializer {
 			SourceConfig.DataSource source = sourceConfig.getSources().get(sourceName);
 			if (source.isEnabled()) {
 				sourceConfig.setCurrentSource(sourceName);
-				sourceConfig.save();
+				sourceConfig.safeSave(); // 使用安全保存
 				return true;
 			}
 		}
