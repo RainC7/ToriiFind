@@ -1,0 +1,206 @@
+package com.fletime.toriifind.config;
+
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
+import org.yaml.snakeyaml.representer.Representer;
+import org.yaml.snakeyaml.DumperOptions;
+import net.fabricmc.loader.api.FabricLoader;
+
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+
+public class SourceConfig {
+    private Map<String, DataSource> sources = new HashMap<>();
+    private String currentSource = "fletime";
+    private int version = 1;
+    
+    public static class DataSource {
+        private String name;
+        private String url;
+        private boolean enabled = true;
+        private SourceType type = SourceType.JSON;
+        private String apiBaseUrl;
+        private String[] mirrorUrls;
+        private String version;
+        
+        public enum SourceType {
+            JSON,    // 传统JSON文件模式
+            API      // Lynn源API模式
+        }
+        
+        public DataSource() {}
+        
+        public DataSource(String name, String url, boolean enabled) {
+            this.name = name;
+            this.url = url;
+            this.enabled = enabled;
+            this.type = SourceType.JSON;
+        }
+        
+        public DataSource(String name, String url, boolean enabled, SourceType type, String apiBaseUrl) {
+            this.name = name;
+            this.url = url;
+            this.enabled = enabled;
+            this.type = type;
+            this.apiBaseUrl = apiBaseUrl;
+        }
+        
+        public DataSource(String name, String url, boolean enabled, String[] mirrorUrls, String version) {
+            this.name = name;
+            this.url = url;
+            this.enabled = enabled;
+            this.type = SourceType.JSON;
+            this.mirrorUrls = mirrorUrls;
+            this.version = version;
+        }
+        
+        public DataSource(String name, String url, boolean enabled, SourceType type, String apiBaseUrl, String version) {
+            this.name = name;
+            this.url = url;
+            this.enabled = enabled;
+            this.type = type;
+            this.apiBaseUrl = apiBaseUrl;
+            this.version = version;
+        }
+        
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        
+        public String getUrl() { return url; }
+        public void setUrl(String url) { this.url = url; }
+        
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        
+        public SourceType getType() { return type; }
+        public void setType(SourceType type) { this.type = type; }
+        
+        public String getApiBaseUrl() { return apiBaseUrl; }
+        public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
+        
+        public String[] getMirrorUrls() { return mirrorUrls; }
+        public void setMirrorUrls(String[] mirrorUrls) { this.mirrorUrls = mirrorUrls; }
+        
+        public String getVersion() { return version; }
+        public void setVersion(String version) { this.version = version; }
+        
+        public boolean isApiMode() { return type == SourceType.API; }
+        
+        public String[] getAllUrls() {
+            if (mirrorUrls == null || mirrorUrls.length == 0) {
+                return new String[]{url};
+            }
+            String[] allUrls = new String[mirrorUrls.length + 1];
+            allUrls[0] = url;
+            System.arraycopy(mirrorUrls, 0, allUrls, 1, mirrorUrls.length);
+            return allUrls;
+        }
+    }
+    
+    public Map<String, DataSource> getSources() { return sources; }
+    public void setSources(Map<String, DataSource> sources) { this.sources = sources; }
+    
+    public String getCurrentSource() { return currentSource; }
+    public void setCurrentSource(String currentSource) { this.currentSource = currentSource; }
+    
+    public int getVersion() { return version; }
+    public void setVersion(int version) { this.version = version; }
+    
+    public DataSource getCurrentDataSource() {
+        return sources.get(currentSource);
+    }
+    
+    public static SourceConfig loadOrCreateDefault() {
+        Path configFile = getConfigPath();
+        
+        if (!Files.exists(configFile)) {
+            return createDefaultConfig();
+        }
+        
+        try {
+            Yaml yaml = new Yaml(new Constructor(SourceConfig.class));
+            try (FileInputStream inputStream = new FileInputStream(configFile.toFile())) {
+                SourceConfig config = yaml.load(inputStream);
+                if (config == null) {
+                    return createDefaultConfig();
+                }
+                return config;
+            }
+        } catch (Exception e) {
+            return createDefaultConfig();
+        }
+    }
+    
+    private static SourceConfig createDefaultConfig() {
+        SourceConfig config = new SourceConfig();
+        
+        // 添加默认的fletime源
+        config.sources.put("fletime", new DataSource(
+            "FleTime源",
+            "https://wiki.ria.red/wiki/%E7%94%A8%E6%88%B7:FleTime/toriifind.json?action=raw",
+            true
+        ));
+        
+        // 添加lynn源（JSON模式，包含镜像）
+        config.sources.put("lynn-json", new DataSource(
+            "Lynn源 (JSON模式)",
+            "https://github.com/7N4D6Un/ToriiFind/raw/refs/heads/main/data/lynn.json",
+            true,
+            new String[]{
+                "https://raw.kkgithub.com/7N4D6Un/ToriiFind/main/data/lynn.json",
+                "https://fastly.jsdelivr.net/gh/7N4D6Un/ToriiFind@main/data/lynn.json"
+            },
+            null
+        ));
+        
+        // 添加lynn源（在线API模式）
+        config.sources.put("lynn-api", new DataSource(
+            "Lynn源 (API模式)",
+            null,
+            true,
+            DataSource.SourceType.API,
+            "https://ria-data.vercel.app",
+            null
+        ));
+        
+        config.currentSource = "fletime";
+        config.version = 1;
+        
+        // 自动保存默认配置
+        config.save();
+        
+        return config;
+    }
+    
+    public void save() {
+        try {
+            Path configFile = getConfigPath();
+            Files.createDirectories(configFile.getParent());
+            
+            DumperOptions options = new DumperOptions();
+            options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+            options.setPrettyFlow(true);
+            
+            Representer representer = new Representer(options);
+            representer.addClassTag(SourceConfig.class, org.yaml.snakeyaml.common.NonPrintableStyle.BINARY);
+            
+            Yaml yaml = new Yaml(representer, options);
+            
+            try (FileWriter writer = new FileWriter(configFile.toFile())) {
+                yaml.dump(this, writer);
+            }
+        } catch (IOException e) {
+            // 静默失败，不影响主要功能
+        }
+    }
+    
+    private static Path getConfigPath() {
+        Path configDir = FabricLoader.getInstance().getConfigDir();
+        return configDir.resolve("toriifind-sources.yml");
+    }
+}
