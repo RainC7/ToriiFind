@@ -19,14 +19,33 @@ import java.util.List;
 public class LynnJsonService {
     
     /**
-     * 从JSON文件URL加载Lynn格式的数据（支持镜像自动选择）
+     * 从数据源加载Lynn格式的数据（优先使用本地文件）
      * @param dataSource 数据源配置
      * @return Landmark列表
      * @throws IOException 网络或解析异常
      */
     public static List<LynnLandmark> loadFromDataSource(com.fletime.toriifind.config.SourceConfig.DataSource dataSource) throws IOException {
-        String[] urls = dataSource.getAllUrls();
+        // 首先尝试查找对应的本地文件
+        for (java.util.Map.Entry<String, com.fletime.toriifind.config.SourceConfig.DataSource> entry : 
+             com.fletime.toriifind.ToriiFind.getAllSources().entrySet()) {
+            if (entry.getValue() == dataSource) {
+                String sourceName = entry.getKey();
+                Path localFile = LocalDataService.getLocalDataFile(sourceName);
+                
+                if (Files.exists(localFile)) {
+                    try {
+                        return loadFromFile(localFile);
+                    } catch (Exception e) {
+                        System.err.println("[ToriiFind] 读取本地文件失败，尝试从网络下载: " + e.getMessage());
+                        break;
+                    }
+                }
+                break;
+            }
+        }
         
+        // 本地文件不存在或读取失败，从网络加载
+        String[] urls = dataSource.getAllUrls();
         IOException lastException = null;
         
         for (String url : urls) {

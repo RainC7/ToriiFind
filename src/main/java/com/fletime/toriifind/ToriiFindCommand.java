@@ -312,7 +312,7 @@ public class ToriiFindCommand {
     }
     
     /**
-     * 快速检查当前数据源状态
+     * 快速检查当前数据源状态（检查云端并更新本地）
      */
     private static int checkCurrentSource(CommandContext<FabricClientCommandSource> context) {
         String currentSourceName = ToriiFind.getCurrentSourceName();
@@ -323,32 +323,51 @@ public class ToriiFindCommand {
             return 1;
         }
         
-        context.getSource().sendFeedback(Text.literal("§6正在检查当前数据源: §a" + currentSourceName + " §7..."));
+        context.getSource().sendFeedback(Text.literal("§6正在检查当前数据源更新: §a" + currentSourceName + " §7..."));
         
-        // 异步检查当前数据源
-        java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-            return SourceStatusService.checkSourceStatus(currentSource);
-        }).thenAcceptAsync(status -> {
-            // 在主线程显示结果
-            net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
-                String mode = currentSource.isApiMode() ? "API模式" : "JSON模式";
-                
-                StringBuilder info = new StringBuilder();
-                info.append("§6").append(currentSourceName).append(" §f(").append(mode).append(") ");
-                info.append(status.getStatusText());
-                
-                if (status.getVersion() != null) {
-                    info.append(" §7版本: ").append(status.getVersion());
-                }
-                
-                context.getSource().sendFeedback(Text.literal(info.toString()));
-                
-                // 显示镜像信息
-                if (!currentSource.isApiMode() && currentSource.getMirrorUrls() != null && currentSource.getMirrorUrls().length > 0) {
-                    context.getSource().sendFeedback(Text.literal("§7镜像地址: " + currentSource.getMirrorUrls().length + " 个备用"));
-                }
+        if (currentSource.isApiMode()) {
+            // API模式：只检查连接状态
+            java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                return SourceStatusService.checkSourceStatus(currentSource);
+            }).thenAcceptAsync(status -> {
+                net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                    String mode = "API模式";
+                    StringBuilder info = new StringBuilder();
+                    info.append("§6").append(currentSourceName).append(" §f(").append(mode).append(") ");
+                    info.append(status.getStatusText());
+                    
+                    context.getSource().sendFeedback(Text.literal(info.toString()));
+                });
             });
-        });
+        } else {
+            // JSON模式：检查更新并下载
+            com.fletime.toriifind.service.LocalDataService.checkAndUpdateDataSource(currentSourceName, currentSource)
+                .thenAcceptAsync(updated -> {
+                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                        String mode = "JSON模式";
+                        StringBuilder info = new StringBuilder();
+                        info.append("§6").append(currentSourceName).append(" §f(").append(mode).append(") ");
+                        
+                        if (updated) {
+                            info.append("§a[已更新]");
+                        } else {
+                            info.append("§a[最新版本]");
+                        }
+                        
+                        context.getSource().sendFeedback(Text.literal(info.toString()));
+                        
+                        // 显示镜像信息
+                        if (currentSource.getMirrorUrls() != null && currentSource.getMirrorUrls().length > 0) {
+                            context.getSource().sendFeedback(Text.literal("§7镜像地址: " + currentSource.getMirrorUrls().length + " 个备用"));
+                        }
+                    });
+                }).exceptionally(throwable -> {
+                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                        context.getSource().sendError(Text.literal("§c检查更新失败: " + throwable.getMessage()));
+                    });
+                    return null;
+                });
+        }
         
         return 1;
     }
@@ -716,15 +735,33 @@ public class ToriiFindCommand {
     }
 
     /**
-     * 加载零洲数据
+     * 加载零洲数据（优先使用本地文件）
      * @return 零洲鸟居列表
      * @throws IOException 读取异常
      */
     private static List<Torii> loadZerothData() throws IOException {
+        // 首先尝试从本地文件读取
+        Path localFile = com.fletime.toriifind.service.LocalDataService.getLocalDataFile("fletime");
+        if (Files.exists(localFile)) {
+            try {
+                return loadZerothDataFromFile(localFile);
+            } catch (Exception e) {
+                System.err.println("[ToriiFind] 读取本地零洲数据失败，尝试从传统配置文件读取: " + e.getMessage());
+            }
+        }
+        
+        // 回退到传统配置文件
         Path configDir = FabricLoader.getInstance().getConfigDir();
         Path configFile = configDir.resolve("toriifind.json");
+        return loadZerothDataFromFile(configFile);
+    }
+    
+    /**
+     * 从指定文件加载零洲数据
+     */
+    private static List<Torii> loadZerothDataFromFile(Path file) throws IOException {
         List<Torii> toriiList = new ArrayList<>();
-        try (Reader reader = Files.newBufferedReader(configFile)) {
+        try (Reader reader = Files.newBufferedReader(file)) {
             JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
             JsonArray zerothArray = jsonObject.getAsJsonArray("zeroth");
             for (int i = 0; i < zerothArray.size(); i++) {
@@ -740,15 +777,33 @@ public class ToriiFindCommand {
     }
 
     /**
-     * 加载后土数据
+     * 加载后土数据（优先使用本地文件）
      * @return 后土境地列表
      * @throws IOException 读取异常
      */
     private static List<Houtu> loadHoutuData() throws IOException {
+        // 首先尝试从本地文件读取
+        Path localFile = com.fletime.toriifind.service.LocalDataService.getLocalDataFile("fletime");
+        if (Files.exists(localFile)) {
+            try {
+                return loadHoutuDataFromFile(localFile);
+            } catch (Exception e) {
+                System.err.println("[ToriiFind] 读取本地后土数据失败，尝试从传统配置文件读取: " + e.getMessage());
+            }
+        }
+        
+        // 回退到传统配置文件
         Path configDir = FabricLoader.getInstance().getConfigDir();
         Path configFile = configDir.resolve("toriifind.json");
+        return loadHoutuDataFromFile(configFile);
+    }
+    
+    /**
+     * 从指定文件加载后土数据
+     */
+    private static List<Houtu> loadHoutuDataFromFile(Path file) throws IOException {
         List<Houtu> houtuList = new ArrayList<>();
-        try (Reader reader = Files.newBufferedReader(configFile)) {
+        try (Reader reader = Files.newBufferedReader(file)) {
             JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
             JsonArray houtuArray = jsonObject.getAsJsonArray("houtu");
             for (int i = 0; i < houtuArray.size(); i++) {

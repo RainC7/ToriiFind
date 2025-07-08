@@ -32,6 +32,16 @@ public class ToriiFind implements ClientModInitializer {
 		sourceConfig = SourceConfig.loadOrCreateDefault();
 		createOrUpdateConfigFile();
 		ToriiFindCommand.register();
+		
+		// 异步初始化数据源到本地
+		com.fletime.toriifind.service.LocalDataService.initializeAllDataSources(sourceConfig.getSources())
+			.thenRun(() -> {
+				LOGGER.info("[ToriiFind] 数据源初始化完成");
+			})
+			.exceptionally(throwable -> {
+				LOGGER.error("[ToriiFind] 数据源初始化失败: " + throwable.getMessage());
+				return null;
+			});
 	}
 	
 	public static SourceConfig getSourceConfig() {
