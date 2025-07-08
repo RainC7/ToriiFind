@@ -119,6 +119,13 @@ public class SourceConfig {
     public static SourceConfig loadOrCreateDefault() {
         Path configFile = getConfigPath();
         
+        // 确保配置目录存在
+        try {
+            Files.createDirectories(configFile.getParent());
+        } catch (Exception e) {
+            System.err.println("[ToriiFind] 创建配置目录失败: " + e.getMessage());
+        }
+        
         if (!Files.exists(configFile)) {
             SourceConfig config = createDefaultConfig();
             config.save(); // 只在文件不存在时保存
@@ -234,7 +241,7 @@ public class SourceConfig {
         try {
             Path configFile = getConfigPath();
             if (Files.exists(configFile)) {
-                Path backupFile = configFile.getParent().resolve("toriifind-sources.yml.backup");
+                Path backupFile = configFile.getParent().resolve("config.yml.backup");
                 Files.copy(configFile, backupFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 System.out.println("[ToriiFind] 已备份配置文件到: " + backupFile);
             }
@@ -245,52 +252,58 @@ public class SourceConfig {
     
     /**
      * 为现有配置添加缺失的默认数据源（用于版本升级）
+     * 只在版本升级时才会添加新的数据源
      */
     private static void addMissingDefaultSources(SourceConfig config) {
         boolean needsSave = false;
         
-        // 检查并添加fletime源
-        if (!config.sources.containsKey("fletime")) {
-            config.sources.put("fletime", new DataSource(
-                "FleTime源",
-                "https://wiki.ria.red/wiki/%E7%94%A8%E6%88%B7:FleTime/toriifind.json?action=raw",
-                true
-            ));
-            needsSave = true;
-        }
-        
-        // 检查并添加lynn-json源
-        if (!config.sources.containsKey("lynn-json")) {
-            config.sources.put("lynn-json", new DataSource(
-                "Lynn源 (JSON模式)",
-                "https://github.com/7N4D6Un/ToriiFind/raw/refs/heads/main/data/lynn.json",
-                true,
-                new String[]{
-                    "https://raw.kkgithub.com/7N4D6Un/ToriiFind/main/data/lynn.json",
-                    "https://fastly.jsdelivr.net/gh/7N4D6Un/ToriiFind@main/data/lynn.json"
-                },
-                null
-            ));
-            needsSave = true;
-        }
-        
-        // 检查并添加lynn-api源
-        if (!config.sources.containsKey("lynn-api")) {
-            config.sources.put("lynn-api", new DataSource(
-                "Lynn源 (API模式)",
-                null,
-                true,
-                DataSource.SourceType.API,
-                "https://ria-data.api.lynn6.top",
-                null
-            ));
-            needsSave = true;
-        }
-        
-        // 如果添加了新源，保存配置
-        if (needsSave) {
-            config.save();
-            System.out.println("[ToriiFind] 已添加新的默认数据源");
+        // 只有在版本升级时才添加新的数据源
+        // 如果用户删除了某个数据源，我们不应该自动添加回来
+        if (config.version < 1) {
+            // 检查并添加fletime源
+            if (!config.sources.containsKey("fletime")) {
+                config.sources.put("fletime", new DataSource(
+                    "FleTime源",
+                    "https://wiki.ria.red/wiki/%E7%94%A8%E6%88%B7:FleTime/toriifind.json?action=raw",
+                    true
+                ));
+                needsSave = true;
+            }
+            
+            // 检查并添加lynn-json源
+            if (!config.sources.containsKey("lynn-json")) {
+                config.sources.put("lynn-json", new DataSource(
+                    "Lynn源 (JSON模式)",
+                    "https://github.com/7N4D6Un/ToriiFind/raw/refs/heads/main/data/lynn.json",
+                    true,
+                    new String[]{
+                        "https://raw.kkgithub.com/7N4D6Un/ToriiFind/main/data/lynn.json",
+                        "https://fastly.jsdelivr.net/gh/7N4D6Un/ToriiFind@main/data/lynn.json"
+                    },
+                    null
+                ));
+                needsSave = true;
+            }
+            
+            // 检查并添加lynn-api源
+            if (!config.sources.containsKey("lynn-api")) {
+                config.sources.put("lynn-api", new DataSource(
+                    "Lynn源 (API模式)",
+                    null,
+                    true,
+                    DataSource.SourceType.API,
+                    "https://ria-data.api.lynn6.top",
+                    null
+                ));
+                needsSave = true;
+            }
+            
+            // 更新版本号
+            if (needsSave) {
+                config.version = 1;
+                config.save();
+                System.out.println("[ToriiFind] 已添加新的默认数据源");
+            }
         }
     }
     
@@ -355,6 +368,7 @@ public class SourceConfig {
     
     private static Path getConfigPath() {
         Path configDir = FabricLoader.getInstance().getConfigDir();
-        return configDir.resolve("toriifind-sources.yml");
+        Path toriifindDir = configDir.resolve("toriifind");
+        return toriifindDir.resolve("config.yml");
     }
 }
