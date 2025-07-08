@@ -183,7 +183,7 @@ public class LocalDataService {
     /**
      * 获取本地文件版本号
      */
-    private static String getLocalVersion(Path localFile) {
+    public static String getLocalVersion(Path localFile) {
         try {
             byte[] firstKB = new byte[1024];
             try (InputStream in = Files.newInputStream(localFile)) {

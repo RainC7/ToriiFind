@@ -190,10 +190,8 @@ public class ToriiFindCommand {
                             .executes(context -> switchSource(context, StringArgumentType.getString(context, "name")))))
                     .then(literal("current")
                         .executes(context -> showCurrentSource(context)))
-                    .then(literal("status")
-                        .executes(context -> showSourcesStatus(context)))
                     .then(literal("check")
-                        .executes(context -> checkCurrentSource(context)))
+                        .executes(context -> checkAllSources(context)))
                     .then(literal("reload")
                         .executes(context -> reloadConfig(context))))
                 .then(literal("ciallo")
@@ -216,8 +214,7 @@ public class ToriiFindCommand {
         context.getSource().sendFeedback(Text.literal("§6/toriifind source list §f- 列出所有可用的数据源"));
         context.getSource().sendFeedback(Text.literal("§6/toriifind source switch <name> §f- 切换到指定数据源"));
         context.getSource().sendFeedback(Text.literal("§6/toriifind source current §f- 显示当前使用的数据源"));
-        context.getSource().sendFeedback(Text.literal("§6/toriifind source check §f- 快速检查当前数据源状态"));
-        context.getSource().sendFeedback(Text.literal("§6/toriifind source status §f- 检查所有数据源连接状态"));
+        context.getSource().sendFeedback(Text.literal("§6/toriifind source check §f- 检查所有数据源更新和状态"));
         context.getSource().sendFeedback(Text.literal("§6/toriifind source reload §f- 重新加载配置文件"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.help.command.ciallo"));
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
@@ -298,75 +295,67 @@ public class ToriiFindCommand {
     }
     
     /**
-     * 显示所有数据源的连接状态（异步版本）
+     * 检查所有数据源更新和状态
      */
-    private static int showSourcesStatus(CommandContext<FabricClientCommandSource> context) {
+    private static int checkAllSources(CommandContext<FabricClientCommandSource> context) {
         context.getSource().sendFeedback(ToriiFind.translate("toriifind.divider"));
+        context.getSource().sendFeedback(Text.literal("§6正在检查所有数据源..."));
+        context.getSource().sendFeedback(Text.literal(""));
         
         Map<String, SourceConfig.DataSource> sources = ToriiFind.getAllSources();
         
-        // 使用异步检测服务
-        AsyncSourceStatusService.checkAllSourcesAsync(context.getSource(), sources);
-        
-        return 1;
-    }
-    
-    /**
-     * 快速检查当前数据源状态（检查云端并更新本地）
-     */
-    private static int checkCurrentSource(CommandContext<FabricClientCommandSource> context) {
-        String currentSourceName = ToriiFind.getCurrentSourceName();
-        SourceConfig.DataSource currentSource = ToriiFind.getAllSources().get(currentSourceName);
-        
-        if (currentSource == null) {
-            context.getSource().sendError(Text.literal("§c当前数据源配置异常"));
-            return 1;
-        }
-        
-        context.getSource().sendFeedback(Text.literal("§6正在检查当前数据源更新: §a" + currentSourceName + " §7..."));
-        
-        if (currentSource.isApiMode()) {
-            // API模式：只检查连接状态
-            java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                return SourceStatusService.checkSourceStatus(currentSource);
-            }).thenAcceptAsync(status -> {
-                net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
-                    String mode = "API模式";
-                    StringBuilder info = new StringBuilder();
-                    info.append("§6").append(currentSourceName).append(" §f(").append(mode).append(") ");
-                    info.append(status.getStatusText());
-                    
-                    context.getSource().sendFeedback(Text.literal(info.toString()));
-                });
-            });
-        } else {
-            // JSON模式：检查更新并下载
-            com.fletime.toriifind.service.LocalDataService.checkAndUpdateDataSource(currentSourceName, currentSource)
-                .thenAcceptAsync(updated -> {
+        for (Map.Entry<String, SourceConfig.DataSource> entry : sources.entrySet()) {
+            String sourceName = entry.getKey();
+            SourceConfig.DataSource dataSource = entry.getValue();
+            
+            if (dataSource.isApiMode()) {
+                // API模式：检查连接状态
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    return SourceStatusService.checkSourceStatus(dataSource);
+                }).thenAcceptAsync(status -> {
                     net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
-                        String mode = "JSON模式";
                         StringBuilder info = new StringBuilder();
-                        info.append("§6").append(currentSourceName).append(" §f(").append(mode).append(") ");
-                        
-                        if (updated) {
-                            info.append("§a[已更新]");
-                        } else {
-                            info.append("§a[最新版本]");
-                        }
+                        info.append("§6").append(sourceName).append(" §f(API模式) ");
+                        info.append(status.getStatusText());
                         
                         context.getSource().sendFeedback(Text.literal(info.toString()));
-                        
-                        // 显示镜像信息
-                        if (currentSource.getMirrorUrls() != null && currentSource.getMirrorUrls().length > 0) {
-                            context.getSource().sendFeedback(Text.literal("§7镜像地址: " + currentSource.getMirrorUrls().length + " 个备用"));
-                        }
                     });
-                }).exceptionally(throwable -> {
-                    net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
-                        context.getSource().sendError(Text.literal("§c检查更新失败: " + throwable.getMessage()));
-                    });
-                    return null;
                 });
+            } else {
+                // JSON模式：检查更新并下载
+                com.fletime.toriifind.service.LocalDataService.checkAndUpdateDataSource(sourceName, dataSource)
+                    .thenAcceptAsync(updated -> {
+                        net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                            StringBuilder info = new StringBuilder();
+                            info.append("§6").append(sourceName).append(" §f(JSON模式) ");
+                            
+                            if (updated) {
+                                info.append("§a[已更新]");
+                            } else {
+                                info.append("§a[最新版本]");
+                            }
+                            
+                            // 显示版本信息
+                            String version = com.fletime.toriifind.service.LocalDataService.getLocalVersion(
+                                com.fletime.toriifind.service.LocalDataService.getLocalDataFile(sourceName));
+                            if (version != null) {
+                                info.append(" §7v").append(version);
+                            }
+                            
+                            context.getSource().sendFeedback(Text.literal(info.toString()));
+                            
+                            // 显示镜像信息
+                            if (dataSource.getMirrorUrls() != null && dataSource.getMirrorUrls().length > 0) {
+                                context.getSource().sendFeedback(Text.literal("  §7镜像: " + dataSource.getMirrorUrls().length + " 个备用地址"));
+                            }
+                        });
+                    }).exceptionally(throwable -> {
+                        net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                            context.getSource().sendError(Text.literal("§c" + sourceName + " 检查失败: " + throwable.getMessage()));
+                        });
+                        return null;
+                    });
+            }
         }
         
         return 1;
